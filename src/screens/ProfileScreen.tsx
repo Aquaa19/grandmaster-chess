@@ -1,24 +1,15 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/ProfileScreen.tsx
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  User, 
-  ArrowRight, 
-  TowerControl, 
-  Bot, 
-  Castle, 
-  Gamepad2, 
-  BrainCircuit, 
-  Gem,
-  Loader2
+  User, TowerControl, Bot, Castle, Gamepad2, 
+  BrainCircuit, Gem, Loader2, Trophy, Medal, Target, 
+  Globe, Shield, Crown, Activity
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
 
 interface ProfileScreenProps {
   user: FirebaseUser | null;
-  onContinue: () => void;
 }
 
 const avatars = [
@@ -30,121 +21,186 @@ const avatars = [
   { id: 6, icon: Gem },
 ];
 
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onContinue }) => {
-  const [selectedAvatar, setSelectedAvatar] = useState<number>(1);
-  const [playerName, setPlayerName] = useState('');
-  const [saving, setSaving] = useState(false);
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user }) => {
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'ai' | 'online'>('online');
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // If user isn't logged in, just proceed without saving to DB
+  useEffect(() => {
     if (!user) {
-      onContinue();
+      setLoading(false);
       return;
     }
 
-    setSaving(true);
-    try {
-      // Rule 1: Always use the exact namespaced path for private user data
-      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
-      await setDoc(profileRef, {
-        name: playerName || 'Guest Player',
-        avatarId: selectedAvatar,
-        updatedAt: serverTimestamp()
-      });
-      onContinue();
-    } catch (error) {
-      console.error("Error saving profile:", error);
-      // Even if saving fails, let them play
-      onContinue();
-    } finally {
-      setSaving(false);
-    }
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    const unsubscribe = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfileData(docSnap.data());
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  if (loading || !profileData) {
+    return (
+      <div className="w-full flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-12 h-12 text-tertiary animate-spin" />
+      </div>
+    );
+  }
+
+  // Calculate Stats
+  const aiStats = profileData?.aiStats || { xp: 0, wins: 0, losses: 0 };
+  const onlineStats = profileData?.onlineStats || { xp: 0, wins: 0, losses: 0 };
+  
+  const currentStats = activeTab === 'ai' ? aiStats : onlineStats;
+  const currentLevel = activeTab === 'ai' 
+    ? Math.floor(Math.max(0, aiStats.xp) / 100) + 1 
+    : Math.floor(Math.max(0, onlineStats.xp) / 150) + 1;
+    
+  const calculateWinRate = (wins: number, losses: number) => {
+    const total = wins + losses;
+    if (total === 0) return 0;
+    return Math.round((wins / total) * 100);
   };
 
+  const currentWinRate = calculateWinRate(currentStats.wins, currentStats.losses);
+
+  // Dynamic Achievements Logic
+  const achievements = [
+    { 
+      id: 'first_blood', name: 'First Blood', desc: 'Win your first match.', 
+      icon: Target, color: 'text-blue-400', 
+      unlocked: aiStats.wins > 0 || onlineStats.wins > 0 
+    },
+    { 
+      id: 'ai_slayer', name: 'AI Conqueror', desc: 'Reach AI Level 5.', 
+      icon: Bot, color: 'text-purple-400', 
+      unlocked: (Math.floor(Math.max(0, aiStats.xp) / 100) + 1) >= 5 
+    },
+    { 
+      id: 'network_gm', name: 'Network Grandmaster', desc: 'Earn 500 Online XP.', 
+      icon: Globe, color: 'text-green-400', 
+      unlocked: onlineStats.xp >= 500 
+    },
+    { 
+      id: 'veteran', name: 'Battle Hardened', desc: 'Play 20 total matches.', 
+      icon: Shield, color: 'text-orange-400', 
+      unlocked: (aiStats.wins + aiStats.losses + onlineStats.wins + onlineStats.losses) >= 20 
+    },
+    { 
+      id: 'flawless', name: 'Tactician', desc: 'Maintain a 70%+ Online Win Rate (min 5 games).', 
+      icon: Crown, color: 'text-yellow-400', 
+      unlocked: (onlineStats.wins + onlineStats.losses) >= 5 && calculateWinRate(onlineStats.wins, onlineStats.losses) >= 70 
+    }
+  ];
+
+  const CurrentAvatarIcon = avatars.find(a => a.id === profileData.avatarId)?.icon || User;
+
   return (
-    <div className="bg-background text-on-background min-h-screen flex items-center justify-center p-md relative overflow-hidden fade-slide-up">
+    <div className="w-full flex flex-col gap-8 max-w-4xl mx-auto pt-6 pb-12 animate-in fade-in duration-500">
       
-      {/* Decorative background elements */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-20%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-tertiary/5 blur-[100px]" />
-        <div className="absolute bottom-[-20%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-primary/5 blur-[100px]" />
+      {/* Header Identity Card */}
+      <div className="glass-panel rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl border-t border-white/10 relative overflow-hidden group">
+         <div className="absolute top-0 right-0 w-64 h-64 bg-tertiary/5 rounded-full blur-3xl group-hover:bg-tertiary/10 transition-colors" />
+         <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left relative z-10">
+            <div className="w-24 h-24 rounded-full bg-surface-container-high border-2 border-tertiary/50 flex items-center justify-center shadow-[0_0_20px_rgba(233,195,73,0.15)]">
+              <CurrentAvatarIcon className="w-12 h-12 text-tertiary" />
+            </div>
+            <div>
+              <h1 className="font-display-lg text-4xl text-primary mb-1">{profileData.name}</h1>
+              <div className="flex items-center justify-center md:justify-start gap-4 text-xs font-mono text-on-surface-variant">
+                <span className="bg-surface-variant px-2 py-1 rounded border border-white/5">UID: {user?.uid.split('-')[0]}</span>
+                <span className="flex items-center gap-1 text-tertiary"><Trophy className="w-4 h-4" /> Grandmaster Candidate</span>
+              </div>
+            </div>
+         </div>
       </div>
 
-      <main className="w-full max-w-[448px] mx-auto glass-panel rounded-xl p-xl shadow-2xl relative z-10">
-        <div className="text-center mb-xl">
-          <h1 className="font-display-lg text-display-lg text-primary mb-sm">Create Profile</h1>
-          <p className="font-body-lg text-body-lg text-on-surface-variant">Forging your identity on the board.</p>
+      {/* Stats Toggle & Overview */}
+      <div className="glass-panel rounded-2xl p-6 md:p-8 border border-white/5">
+        
+        {/* Toggle Nav */}
+        <div className="flex bg-surface-container-high rounded-lg p-1 mb-8 border border-white/5">
+           <button 
+             onClick={() => setActiveTab('online')}
+             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md font-title-md transition-all ${activeTab === 'online' ? 'bg-tertiary/10 text-tertiary shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
+           >
+             <Globe className="w-5 h-5" /> Ranked Multiplayer
+           </button>
+           <button 
+             onClick={() => setActiveTab('ai')}
+             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md font-title-md transition-all ${activeTab === 'ai' ? 'bg-purple-500/10 text-purple-400 shadow-sm' : 'text-on-surface-variant hover:text-primary'}`}
+           >
+             <Bot className="w-5 h-5" /> AI Campaign
+           </button>
         </div>
 
-        <form onSubmit={handleSaveProfile} className="space-y-xl">
-          
-          {/* Player Name Input */}
-          <div className="space-y-sm">
-            <label htmlFor="player-name" className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest block">
-              Player Name
-            </label>
-            <div className="relative">
-              <User className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant w-5 h-5" />
-              <input 
-                type="text" 
-                id="player-name" 
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Enter your moniker" 
-                className="w-full bg-surface-container text-on-surface font-body-lg text-body-lg border border-white/20 rounded-DEFAULT py-md pl-12 pr-md focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary transition-colors duration-200 placeholder:text-on-surface-variant/50"
-              />
-            </div>
+        {/* Dynamic Stats Grid */}
+        <div className="grid grid-cols-2 gap-4 mb-6 animate-in slide-in-from-bottom-2 duration-300" key={activeTab}>
+          <div className="bg-surface-container-high p-6 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+             <div className="text-on-surface-variant text-xs mb-2 uppercase tracking-widest font-label-caps">Total Experience</div>
+             <div className={`text-4xl font-mono ${activeTab === 'online' ? 'text-tertiary' : 'text-purple-400'}`}>{currentStats.xp}</div>
           </div>
+          <div className="bg-surface-container-high p-6 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+             <div className="text-on-surface-variant text-xs mb-2 uppercase tracking-widest font-label-caps">Current Level</div>
+             <div className="text-4xl font-mono text-primary">Lv. {currentLevel}</div>
+          </div>
+        </div>
 
-          {/* Avatar Selection */}
-          <div className="space-y-md">
-            <label className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest block">
-              Select Avatar
-            </label>
-            <div className="grid grid-cols-3 gap-md">
-              {avatars.map(({ id, icon: Icon }) => (
-                <label key={id} className="cursor-pointer group">
-                  <input 
-                    type="radio" 
-                    name="avatar" 
-                    value={id} 
-                    checked={selectedAvatar === id}
-                    onChange={() => setSelectedAvatar(id)}
-                    className="peer sr-only" 
-                  />
-                  <div className="aspect-square rounded-DEFAULT border-2 border-transparent peer-checked:border-tertiary bg-surface-container flex items-center justify-center relative overflow-hidden transition-all duration-200 group-hover:border-white/30 peer-checked:group-hover:border-tertiary">
-                    <Icon className={`w-8 h-8 transition-colors ${selectedAvatar === id ? 'text-tertiary' : 'text-on-surface-variant'}`} />
-                    <div className={`absolute inset-0 bg-tertiary/10 transition-opacity ${selectedAvatar === id ? 'opacity-100' : 'opacity-0'}`} />
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
+        {/* Win/Loss Bar */}
+        <div className="bg-surface-variant/30 p-6 rounded-xl animate-in slide-in-from-bottom-4 duration-300" key={`wl-${activeTab}`}>
+           <div className="flex items-center justify-between mb-4">
+              <div className="flex gap-8">
+                 <div>
+                    <div className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps mb-1">Victories</div>
+                    <div className="text-2xl font-bold text-green-400">{currentStats.wins}</div>
+                 </div>
+                 <div>
+                    <div className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps mb-1">Defeats</div>
+                    <div className="text-2xl font-bold text-error">{currentStats.losses}</div>
+                 </div>
+              </div>
+              <div className="text-right">
+                 <div className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps mb-1">Win Rate</div>
+                 <div className={`text-2xl font-mono flex items-center gap-2 ${activeTab === 'online' ? 'text-tertiary' : 'text-purple-400'}`}>
+                   <Activity className="w-6 h-6" /> {currentWinRate}%
+                 </div>
+              </div>
+           </div>
+           
+           {/* Visual Ratio Bar */}
+           <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden flex">
+              <div className="h-full bg-green-500 transition-all duration-1000 ease-out" style={{ width: `${currentStats.wins + currentStats.losses > 0 ? (currentStats.wins / (currentStats.wins + currentStats.losses)) * 100 : 0}%` }} />
+              <div className="h-full bg-error transition-all duration-1000 ease-out" style={{ width: `${currentStats.wins + currentStats.losses > 0 ? (currentStats.losses / (currentStats.wins + currentStats.losses)) * 100 : 0}%` }} />
+           </div>
+        </div>
+      </div>
 
-          {/* Action Button */}
-          <div className="pt-md">
-            <button 
-              type="submit" 
-              disabled={saving}
-              className="w-full bg-primary text-on-primary font-title-md text-title-md py-md px-lg rounded-DEFAULT hover:bg-white transition-colors duration-200 flex items-center justify-center gap-sm group disabled:opacity-50 active:scale-95"
-            >
-              {saving ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <span>Continue</span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </div>
-          
-        </form>
-      </main>
+      {/* Achievements Section */}
+      <div className="glass-panel rounded-2xl p-6 md:p-8">
+         <div className="flex items-center gap-3 mb-6">
+            <Medal className="w-6 h-6 text-tertiary" />
+            <h3 className="text-2xl font-serif text-primary">Trophy Room</h3>
+         </div>
+         
+         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+           {achievements.map((ach) => (
+              <div key={ach.id} className={`p-4 rounded-xl border flex items-start gap-4 transition-all ${ach.unlocked ? 'bg-surface-container-high border-white/10 hover:border-white/20 hover:-translate-y-1' : 'bg-surface-container/50 border-transparent opacity-50 grayscale'}`}>
+                 <div className={`p-3 rounded-lg ${ach.unlocked ? 'bg-surface-variant shadow-inner' : 'bg-surface-container-high'}`}>
+                    <ach.icon className={`w-6 h-6 ${ach.unlocked ? ach.color : 'text-on-surface-variant'}`} />
+                 </div>
+                 <div>
+                   <h4 className={`text-sm font-bold ${ach.unlocked ? 'text-primary' : 'text-on-surface-variant'}`}>{ach.name}</h4>
+                   <p className="text-[10px] text-on-surface-variant mt-1 leading-tight">{ach.desc}</p>
+                 </div>
+              </div>
+           ))}
+         </div>
+      </div>
+
     </div>
   );
 };
-
-export default ProfileScreen;

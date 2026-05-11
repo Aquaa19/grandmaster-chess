@@ -1,9 +1,7 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/hooks/useOnlineChess.ts
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Chess } from 'chess.js';
 import type { Move, Square } from 'chess.js';
-import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, increment, getDoc } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
 
 export interface OnlineMatchState {
@@ -11,11 +9,14 @@ export interface OnlineMatchState {
   pgn: string;
   whiteId: string;
   blackId: string;
+  whiteAccepted?: boolean;
+  blackAccepted?: boolean;
   whiteTime: number;
   blackTime: number;
   turn: 'w' | 'b';
-  status: 'waiting' | 'ongoing' | 'completed' | 'paused';
+  status: 'waiting' | 'pending' | 'ongoing' | 'completed' | 'paused' | 'resigned' | 'rejected';
   winner: string | null;
+  winnerId: string | null;
   lastMoveAt: any;
 }
 
@@ -26,18 +27,30 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
   const [matchData, setMatchData] = useState<OnlineMatchState | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
+  const [opponentProfile, setOpponentProfile] = useState<any>(null);
   
   const [whiteTime, setWhiteTime] = useState(600);
   const [blackTime, setBlackTime] = useState(600);
   
-  // Use a ref to prevent local updates from triggering redundant snapshot logic
   const isLocalUpdate = useRef(false);
+  const xpProcessed = useRef(false);
 
-  // 1. Sync with Firestore
+  const opponentId = matchData ? (playerColor === 'w' ? matchData.blackId : matchData.whiteId) : null;
+  const hasAccepted = matchData ? (playerColor === 'w' ? matchData.whiteAccepted : matchData.blackAccepted) : false;
+
+  // Fetch Opponent Profile Details
+  useEffect(() => {
+    if (!opponentId) return;
+    const profileRef = doc(db, 'artifacts', appId, 'users', opponentId, 'profile', 'data');
+    getDoc(profileRef).then(snap => {
+      if (snap.exists()) setOpponentProfile(snap.data());
+    });
+  }, [opponentId]);
+
+  // Sync with Firestore
   useEffect(() => {
     if (!matchId || !userId) return;
 
-    // Rule 1: Use strictly namespaced public path for collaborative data
     const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
 
     const unsubscribe = onSnapshot(matchRef, (snapshot) => {
@@ -46,11 +59,9 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
       const data = snapshot.data() as OnlineMatchState;
       setMatchData(data);
 
-      // Determine player color
       if (data.whiteId === userId) setPlayerColor('w');
       else if (data.blackId === userId) setPlayerColor('b');
 
-      // Sync local chess engine if the move came from the opponent
       if (!isLocalUpdate.current) {
         const newGame = new Chess();
         if (data.pgn) {
@@ -67,7 +78,6 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
       setBlackTime(data.blackTime);
       setIsMyTurn(data.turn === (data.whiteId === userId ? 'w' : 'b'));
       
-      // Reset local update flag after processing snapshot
       isLocalUpdate.current = false;
     }, (error) => {
       console.error("Online sync error:", error);
@@ -76,7 +86,7 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
     return () => unsubscribe();
   }, [matchId, userId]);
 
-  // 2. Networked Timer Logic
+  // Networked Timer Logic
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     
@@ -93,7 +103,39 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
     return () => clearInterval(interval);
   }, [matchData?.status, matchData?.turn]);
 
-  // 3. Make Move (Remote Update)
+  // Process XP and Stats on Match End
+  useEffect(() => {
+    if (!matchData || !userId || xpProcessed.current) return;
+    
+    if (matchData.status === 'completed' || matchData.status === 'resigned') {
+      xpProcessed.current = true;
+      const profileRef = doc(db, 'artifacts', appId, 'users', userId, 'profile', 'data');
+
+      let xpChange = 0;
+      let winChange = 0;
+      let lossChange = 0;
+
+      if (matchData.winnerId === userId) {
+        xpChange = 50; 
+        winChange = 1;
+      } else if (matchData.winnerId && matchData.winnerId !== userId) {
+        xpChange = -50; 
+        lossChange = 1;
+      }
+
+      if (xpChange !== 0 || winChange !== 0 || lossChange !== 0) {
+        setDoc(profileRef, {
+          onlineStats: {
+            xp: increment(xpChange),
+            wins: increment(winChange),
+            losses: increment(lossChange),
+          }
+        }, { merge: true }).catch(e => console.error("Failed to update stats", e));
+      }
+    }
+  }, [matchData?.status, matchData?.winnerId, userId]);
+
+  // Make Move
   const makeOnlineMove = useCallback(async (source: string, target: string, promotion: string = 'q') => {
     if (!matchId || !matchData || !isMyTurn || matchData.status !== 'ongoing') return false;
 
@@ -103,23 +145,23 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
       const move = gameCopy.move({ from: source, to: target, promotion });
 
       if (move) {
-        isLocalUpdate.current = true; // Mark that we are initiating the update
+        isLocalUpdate.current = true; 
         
         const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
+        const isMate = gameCopy.isCheckmate();
         
-        // Update Firestore - This triggers the opponent's onSnapshot
         await updateDoc(matchRef, {
           fen: gameCopy.fen(),
           pgn: gameCopy.pgn(),
           turn: gameCopy.turn(),
-          whiteTime: whiteTime, // Sync local timer state to DB
+          whiteTime: whiteTime, 
           blackTime: blackTime,
-          status: gameCopy.isGameOver() ? 'completed' : 'ongoing',
-          winner: gameCopy.isCheckmate() ? (playerColor === 'w' ? 'White' : 'Black') : null,
+          status: isMate ? 'completed' : 'ongoing',
+          winner: isMate ? (playerColor === 'w' ? 'White' : 'Black') : null,
+          winnerId: isMate ? userId : null,
           lastMoveAt: serverTimestamp()
         });
 
-        // Update local state immediately for responsiveness
         setGame(gameCopy);
         setFen(gameCopy.fen());
         setMoveHistory(gameCopy.history({ verbose: true }) as Move[]);
@@ -132,15 +174,56 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
       return false;
     }
     return false;
-  }, [matchId, matchData, isMyTurn, game, whiteTime, blackTime, playerColor]);
+  }, [matchId, matchData, isMyTurn, game, whiteTime, blackTime, playerColor, userId]);
 
-  const togglePause = useCallback(async () => {
+  // Acceptance Logic
+  const acceptMatch = useCallback(async () => {
+    if (!matchId || !matchData || !playerColor) return;
+    const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
+    
+    const field = playerColor === 'w' ? 'whiteAccepted' : 'blackAccepted';
+    const otherField = playerColor === 'w' ? matchData.blackAccepted : matchData.whiteAccepted;
+    
+    const updates: any = { [field]: true };
+    if (otherField) {
+      updates.status = 'ongoing';
+    }
+    
+    await updateDoc(matchRef, updates);
+  }, [matchId, matchData, playerColor]);
+
+  const rejectMatch = useCallback(async () => {
     if (!matchId) return;
     const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
+    await updateDoc(matchRef, { status: 'rejected' });
+  }, [matchId]);
+
+  // Resign Logic
+  const resignMatch = useCallback(async () => {
+    if (!matchId || !userId || !matchData || matchData.status !== 'ongoing') return;
+    
+    const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
+    const opponentWinId = matchData.whiteId === userId ? matchData.blackId : matchData.whiteId;
+    const opponentColor = matchData.whiteId === userId ? 'Black' : 'White';
+
     await updateDoc(matchRef, {
-      status: matchData?.status === 'paused' ? 'ongoing' : 'paused'
+      status: 'resigned',
+      winner: opponentColor,
+      winnerId: opponentWinId,
+      lastMoveAt: serverTimestamp()
     });
-  }, [matchId, matchData?.status]);
+  }, [matchId, userId, matchData]);
+
+  // Pause Logic (with Timer sync)
+  const togglePause = useCallback(async () => {
+    if (!matchId || !matchData) return;
+    const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
+    await updateDoc(matchRef, {
+      status: matchData.status === 'paused' ? 'ongoing' : 'paused',
+      whiteTime,
+      blackTime
+    });
+  }, [matchId, matchData?.status, whiteTime, blackTime]);
 
   return {
     game,
@@ -149,11 +232,17 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
     matchData,
     isMyTurn,
     playerColor,
+    opponentId,
+    opponentProfile,
+    hasAccepted,
     whiteTime,
     blackTime,
     makeOnlineMove,
     togglePause,
-    isGameOver: game.isGameOver(),
+    acceptMatch,
+    rejectMatch,
+    resignMatch,
+    isGameOver: game.isGameOver() || matchData?.status === 'resigned' || matchData?.status === 'rejected',
     isCheckmate: game.isCheckmate()
   };
 };

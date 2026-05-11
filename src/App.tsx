@@ -1,14 +1,13 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/App.tsx
-
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db, appId } from './config/firebase';
 import { Loader2 } from 'lucide-react';
 
 import LoginScreen from './screens/LoginScreen';
-import ProfileScreen from './screens/ProfileScreen';
+import { CreateProfileScreen } from './screens/CreateProfileScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LocalMultiplayerScreen } from './screens/LocalMultiplayerScreen';
 import { SinglePlayerScreen } from './screens/SinglePlayerScreen';
@@ -18,9 +17,9 @@ import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
 import { OnlineMatchScreen } from './screens/OnlineMatchScreen';
 import { AppLayout } from './components/layout/AppLayout';
 
-// Updated ScreenState to include Online Multiplayer routes
 export type ScreenState = 
   | 'login' 
+  | 'create_profile' 
   | 'profile' 
   | 'home' 
   | 'local' 
@@ -62,42 +61,48 @@ export default function App() {
     
     initAuth();
     
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    let unsubscribeProfile: () => void;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       
       if (!u) {
         setInitializing(false);
         setCurrentScreen('login');
+        if (unsubscribeProfile) unsubscribeProfile();
         return;
       }
 
-      try {
-        // Rule 1: Namespaced path for profile data
-        const profileRef = doc(db, 'artifacts', appId, 'users', u.uid, 'profile', 'data');
-        const docSnap = await getDoc(profileRef);
-
+      // Rule 1: Namespaced path for profile data
+      const profileRef = doc(db, 'artifacts', appId, 'users', u.uid, 'profile', 'data');
+      
+      // Use onSnapshot to keep sidebar name synced with dashboard edits
+      unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setPlayerName(data.name || 'Guest Player');
-          setCurrentScreen('home'); 
+          
+          setInitializing((prevInit) => {
+            if (prevInit) setCurrentScreen('home'); // Only force route on initial load
+            return false;
+          });
         } else {
-          setCurrentScreen('profile'); 
+          setCurrentScreen('create_profile'); 
+          setInitializing(false);
         }
-      } catch (e) {
+      }, (e) => {
         console.error("Error fetching profile:", e);
-        setCurrentScreen('profile'); 
-      } finally {
+        setCurrentScreen('create_profile'); 
         setInitializing(false);
-      }
+      });
     });
     
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
-  /**
-   * Navigation handler that supports passing match IDs for 
-   * Replay and Online Match screens.
-   */
   const handleNavigate = (screen: ScreenState, matchId?: string) => {
     if (matchId) {
       setSelectedMatchId(matchId);
@@ -116,22 +121,26 @@ export default function App() {
     );
   }
 
+  // Screens that render OUTSIDE the main layout
   if (currentScreen === 'login') {
     return <LoginScreen onAuth={() => {}} />;
   }
   
-  if (currentScreen === 'profile') {
-    return <ProfileScreen user={user} onContinue={() => {
-      setTimeout(() => setCurrentScreen('home'), 100);
-    }} />;
+  if (currentScreen === 'create_profile') {
+    return <CreateProfileScreen user={user} onContinue={() => setCurrentScreen('home')} />;
   }
 
+  // Screens that render INSIDE the main layout with sidebar
   return (
     <AppLayout 
       currentScreen={currentScreen} 
       onNavigate={handleNavigate as any}
       playerName={playerName}
     >
+      {currentScreen === 'profile' && (
+        <ProfileScreen user={user} />
+      )}
+
       {currentScreen === 'home' && (
         <HomeScreen onNavigate={handleNavigate as any} />
       )}

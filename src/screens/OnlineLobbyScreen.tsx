@@ -1,24 +1,16 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/OnlineLobbyScreen.tsx
-
 import React, { useState, useEffect } from 'react';
 import { 
   Globe, UserPlus, Swords, ArrowLeft, Loader2, 
   Copy, Check, ShieldCheck, Zap, Users, AlertCircle 
 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, doc, setDoc, getDoc, getDocs, 
+  collection, doc, setDoc, getDoc, getDocs, 
   onSnapshot, deleteDoc, serverTimestamp 
 } from 'firebase/firestore';
 import type { User as FirebaseUser } from 'firebase/auth';
 
-// --- Firebase Configuration & Initialization ---
-const firebaseConfig = JSON.parse(typeof window !== 'undefined' && (window as any).__firebase_config ? (window as any).__firebase_config : '{}');
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const appId = typeof window !== 'undefined' && (window as any).__app_id ? (window as any).__app_id : 'default-app-id';
+import { db, appId } from '../config/firebase';
 
-// Define the ScreenState type locally to avoid circular dependencies in preview
 type ScreenState = 'login' | 'profile' | 'home' | 'local' | 'ai' | 'history' | 'replay' | 'online_lobby' | 'online_match';
 
 interface OnlineLobbyScreenProps {
@@ -34,11 +26,9 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- 1. RANDOM MATCHMAKING LOGIC ---
   useEffect(() => {
     if (matchmakingStatus !== 'searching' || !user) return;
 
-    // Path: /artifacts/{appId}/public/data/{collectionName}
     const matchmakingRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matchmaking', user.uid);
     
     const startSearch = async () => {
@@ -70,7 +60,9 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
             whiteId: foundOpponent.userId,
             blackId: user.uid,
             turn: 'w',
-            status: 'ongoing',
+            status: 'pending',
+            whiteAccepted: false,
+            blackAccepted: false,
             whiteTime: 600,
             blackTime: 600,
             fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
@@ -109,7 +101,6 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
     };
   }, [matchmakingStatus, user, onNavigate]);
 
-  // --- 2. PRIVATE ROOM LOGIC ---
   const handleCreatePrivate = async () => {
     if (!user) return;
     const newMatchId = crypto.randomUUID().split('-')[0].toUpperCase();
@@ -122,6 +113,8 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
         blackId: null,
         turn: 'w',
         status: 'waiting',
+        whiteAccepted: false,
+        blackAccepted: false,
         whiteTime: 600,
         blackTime: 600,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
@@ -133,7 +126,7 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
       setView('private');
 
       onSnapshot(matchRef, (snapshot) => {
-        if (snapshot.exists() && snapshot.data().status === 'ongoing') {
+        if (snapshot.exists() && snapshot.data().status === 'pending') {
           onNavigate('online_match', newMatchId);
         }
       });
@@ -153,13 +146,13 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.status !== 'waiting') {
-          setError("This match is already in progress.");
+          setError("This match is no longer available.");
           return;
         }
 
         await setDoc(matchRef, {
           blackId: user.uid,
-          status: 'ongoing',
+          status: 'pending',
           lastUpdated: serverTimestamp()
         }, { merge: true });
 
@@ -243,22 +236,22 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
       )}
 
       {matchmakingStatus === 'searching' && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-2xl p-12 flex flex-col items-center justify-center text-center gap-8 min-h-[400px]">
-          <div className="relative">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center gap-8 min-h-[400px] w-full min-w-[320px] md:min-w-[500px] max-w-lg mx-auto">
+          <div className="relative shrink-0">
             <div className="w-32 h-32 rounded-full border-4 border-yellow-500/10 border-t-yellow-500 animate-spin" />
             <Globe className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-yellow-500 animate-pulse" />
           </div>
-          <div>
-            <h3 className="text-4xl font-serif text-slate-200 mb-2">Searching for Rival...</h3>
-            <p className="text-lg text-slate-400 max-w-sm mx-auto italic">"Every chess master was once a beginner."</p>
+          <div className="w-full shrink-0">
+            <h3 className="text-3xl md:text-4xl font-serif text-slate-200 mb-2 whitespace-nowrap">Searching for Rival...</h3>
+            <p className="text-lg text-slate-400 w-full italic">"Every chess master was once a beginner."</p>
           </div>
           <button 
             onClick={() => setMatchmakingStatus('idle')}
-            className="px-8 py-2 bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-white/5 font-medium"
+            className="px-8 py-2 bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-white/5 font-medium shrink-0"
           >
             Cancel Queue
           </button>
-          <div className="mt-8 flex items-center gap-2 text-slate-500 font-mono text-xs tracking-tighter uppercase">
+          <div className="mt-4 flex items-center justify-center gap-2 text-slate-500 font-mono text-xs tracking-tighter uppercase shrink-0 w-full whitespace-nowrap">
             <ShieldCheck className="w-4 h-4" /> Secure Ranked Protocol Active
           </div>
         </div>

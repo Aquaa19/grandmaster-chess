@@ -1,9 +1,7 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/OnlineMatchScreen.tsx
-
 import React, { useState, useEffect } from 'react';
 import { 
-  Globe, UserCircle, Crown, Loader2, Search, 
-  Pause, Play, AlertCircle, LogOut, MessageSquare 
+  Globe, UserCircle, Crown, Loader2, 
+  Pause, Play, AlertCircle, LogOut, MessageSquare, ShieldCheck
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Square } from 'chess.js';
@@ -34,10 +32,16 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
     matchData,
     isMyTurn,
     playerColor,
+    opponentId,
+    opponentProfile,
+    hasAccepted,
     whiteTime,
     blackTime,
     makeOnlineMove,
     togglePause,
+    acceptMatch,
+    rejectMatch,
+    resignMatch,
     isGameOver,
     isCheckmate
   } = useOnlineChess(matchId, user?.uid || null);
@@ -45,7 +49,6 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
   const [previewMoveSquare, setPreviewMoveSquare] = useState<Square | null>(null);
   const [showBlockWarning, setShowBlockWarning] = useState(false);
 
-  // Group moves for the Match Log
   const groupedMoves = [];
   for (let i = 0; i < moveHistory.length; i += 2) {
     groupedMoves.push({
@@ -56,7 +59,6 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
     });
   }
 
-  // Prevent accidental navigation
   useEffect(() => {
     const handleNavClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -76,6 +78,12 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
     setTimeout(() => setPreviewMoveSquare(null), 1500);
   };
 
+  const handleResign = async () => {
+    if (window.confirm("Concede the match? You will incur a 50 XP penalty.")) {
+      await resignMatch();
+    }
+  };
+
   if (!matchData) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-md">
@@ -86,7 +94,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
   }
 
   const isFlipped = playerColor === 'b';
-  const opponentName = playerColor === 'w' ? 'Opponent (Black)' : 'Opponent (White)';
+  const opponentName = opponentProfile?.name || (playerColor === 'w' ? 'Opponent (Black)' : 'Opponent (White)');
   const currentTurnLabel = (matchData.turn === 'w' ? 'White' : 'Black') + "'s Turn";
 
   return (
@@ -98,7 +106,6 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
         </div>
       )}
 
-      {/* Main Game Area */}
       <div className="flex-1 flex flex-col items-center justify-center min-w-0 gap-md">
         
         {/* Opponent UI */}
@@ -133,6 +140,76 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
           />
 
           {/* Status Overlays */}
+          {/* Status Overlays */}
+          {matchData.status === 'pending' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+                  <ShieldCheck className="w-12 h-12 text-tertiary mb-4 shrink-0" />
+                  <h2 className="font-display-lg text-3xl text-primary mb-6 whitespace-nowrap shrink-0">Match Found</h2>
+                  
+                  {opponentProfile ? (
+                    <div className="bg-surface-variant/50 p-4 rounded-xl mb-6 w-full text-left border border-white/5 shrink-0">
+                      <div className="flex items-center gap-3 mb-2">
+                         <UserCircle className="w-8 h-8 text-tertiary shrink-0" />
+                         <div className="overflow-hidden">
+                           <div className="font-title-md text-primary truncate whitespace-nowrap">{opponentProfile.name || 'Anonymous Player'}</div>
+                           <div className="text-[10px] text-on-surface-variant font-mono tracking-widest whitespace-nowrap">UID: {opponentId?.slice(0,8)}...</div>
+                         </div>
+                      </div>
+                      <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2 mt-2">
+                         <span className="text-on-surface-variant font-label-caps tracking-widest text-[10px] whitespace-nowrap">Experience</span>
+                         <span className="font-mono-stats text-tertiary whitespace-nowrap">{opponentProfile.onlineStats?.xp || 0} XP</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-6 w-full mb-6 border border-white/5 rounded-xl border-dashed shrink-0">
+                      <Loader2 className="w-8 h-8 text-tertiary animate-spin mb-2" />
+                      <span className="text-xs text-on-surface-variant whitespace-nowrap">Decrypting profile...</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col gap-2 w-full mb-6 shrink-0">
+                    <div className="flex justify-between items-center text-xs font-mono bg-green-500/10 text-green-400 p-3 rounded">
+                       <span className="whitespace-nowrap">Win Reward:</span> <span className="whitespace-nowrap font-bold">+50 XP</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-mono bg-error/10 text-error p-3 rounded">
+                       <span className="whitespace-nowrap">Loss Penalty:</span> <span className="whitespace-nowrap font-bold">-50 XP</span>
+                    </div>
+                  </div>
+
+                  {hasAccepted ? (
+                    <div className="w-full py-3 bg-surface-variant text-primary rounded-lg font-title-md flex items-center justify-center gap-2 animate-pulse shrink-0">
+                       <Loader2 className="w-5 h-5 animate-spin" /> <span className="whitespace-nowrap">Waiting for opponent...</span>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 w-full shrink-0">
+                      <button onClick={rejectMatch} className="flex-1 bg-surface-variant hover:bg-error/20 text-on-surface-variant hover:text-error font-title-md py-3 rounded-lg transition-colors border border-white/5 whitespace-nowrap">
+                        Decline
+                      </button>
+                      <button onClick={acceptMatch} className="flex-1 bg-tertiary text-on-tertiary font-title-md py-3 rounded-lg transition-transform active:scale-95 shadow-lg shadow-tertiary/20 whitespace-nowrap">
+                        Accept
+                      </button>
+                    </div>
+                  )}
+               </div>
+            </div>
+          )}
+
+          {matchData.status === 'rejected' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+                  <AlertCircle className="w-16 h-16 text-error mb-4 shrink-0" />
+                  <h2 className="font-display-lg text-3xl text-primary mb-4 whitespace-nowrap shrink-0">Match Cancelled</h2>
+                  <p className="font-body-lg text-on-surface-variant mb-8 w-full shrink-0">
+                    A player has declined the match. No XP penalties were applied.
+                  </p>
+                  <button onClick={() => onNavigate('online_lobby')} className="w-full bg-surface-variant text-primary font-title-md py-3 rounded-lg active:scale-95 transition-all border border-white/5 hover:bg-surface-container-high whitespace-nowrap shrink-0">
+                    Return to Lobby
+                  </button>
+               </div>
+            </div>
+          )}
+
           {matchData.status === 'waiting' && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-background/80 backdrop-blur-md rounded-lg border border-white/10 text-center p-xl">
                <Globe className="w-16 h-16 text-primary mb-md animate-pulse" />
@@ -150,16 +227,41 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
             </div>
           )}
 
-          {isCheckmate && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4">
-              <div className="glass-panel p-xl rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 max-w-sm">
-                <Crown className="w-16 h-16 text-tertiary mb-sm drop-shadow-[0_0_15px_rgba(233,195,73,0.5)]" />
-                <h2 className="font-display-lg text-4xl text-primary mb-sm">Checkmate</h2>
-                <p className="font-body-lg text-on-surface-variant mb-xl">
+          {matchData.status === 'resigned' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in fade-in zoom-in-95 duration-300 overflow-visible">
+              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+                <Crown className={`w-16 h-16 mb-4 shrink-0 drop-shadow-[0_0_15px_rgba(233,195,73,0.5)] ${matchData.winnerId === user?.uid ? 'text-tertiary' : 'text-on-surface-variant'}`} />
+                <h2 className="font-display-lg text-3xl md:text-4xl text-primary mb-4 whitespace-nowrap shrink-0">
+                  {matchData.winnerId === user?.uid ? 'Opponent Resigned' : 'Match Conceded'}
+                </h2>
+                <p className="font-body-lg text-on-surface-variant mb-6 w-full shrink-0">
+                  {matchData.winnerId === user?.uid 
+                    ? 'Victory by resignation. The arena acknowledges your dominance.' 
+                    : 'You have surrendered the match.'}
+                </p>
+                <div className={`font-mono-stats text-3xl mb-8 font-bold shrink-0 ${matchData.winnerId === user?.uid ? 'text-green-400' : 'text-error'}`}>
+                  {matchData.winnerId === user?.uid ? '+50 XP' : '-50 XP'}
+                </div>
+                <button onClick={() => onNavigate('home')} className="w-full bg-surface-variant hover:bg-surface-container-high text-primary font-title-md py-3 rounded-lg active:scale-95 transition-all border border-white/5 whitespace-nowrap shrink-0">
+                  Return to Lobby
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isCheckmate && matchData.status !== 'resigned' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 overflow-visible">
+              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+                <Crown className="w-16 h-16 text-tertiary mb-4 shrink-0 drop-shadow-[0_0_15px_rgba(233,195,73,0.5)]" />
+                <h2 className="font-display-lg text-4xl text-primary mb-4 whitespace-nowrap shrink-0">Checkmate</h2>
+                <p className="font-body-lg text-on-surface-variant mb-6 w-full shrink-0">
                   Match Concluded. Result has been recorded in the global archives.
                 </p>
-                <button onClick={() => onNavigate('history')} className="w-full bg-tertiary text-on-tertiary font-title-md py-md rounded-lg active:scale-95 transition-transform">
-                  View Results
+                <div className={`font-mono-stats text-3xl mb-8 font-bold shrink-0 ${matchData.winnerId === user?.uid ? 'text-green-400' : 'text-error'}`}>
+                  {matchData.winnerId === user?.uid ? '+50 XP' : '-50 XP'}
+                </div>
+                <button onClick={() => onNavigate('home')} className="w-full bg-tertiary text-on-tertiary font-title-md py-3 rounded-lg active:scale-95 transition-transform whitespace-nowrap shrink-0">
+                  Return to Lobby
                 </button>
               </div>
             </div>
@@ -188,17 +290,17 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
         
         {/* Controls */}
         <div className="glass-panel rounded-xl p-md flex justify-between items-center">
-          <button onClick={togglePause} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95">
+          <button onClick={togglePause} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95" disabled={matchData.status === 'pending' || matchData.status === 'rejected'}>
             {matchData.status === 'paused' ? <Play className="w-6 h-6 text-tertiary" /> : <Pause className="w-6 h-6" />}
             <span className="font-label-caps text-[10px]">{matchData.status === 'paused' ? 'Resume' : 'Pause'}</span>
           </button>
           <div className="w-px h-8 bg-white/10" />
-          <button className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors">
+          <button className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors" disabled={matchData.status === 'pending' || matchData.status === 'rejected'}>
             <MessageSquare className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Chat</span>
           </button>
           <div className="w-px h-8 bg-white/10" />
-          <button onClick={() => onNavigate('home')} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-error transition-colors">
+          <button onClick={handleResign} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-error transition-colors" disabled={matchData.status === 'pending' || matchData.status === 'rejected'}>
             <LogOut className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Resign</span>
           </button>
@@ -222,7 +324,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
                 <div className="text-primary">{m.black}</div>
               </div>
             ))}
-            {!isGameOver && (
+            {!isGameOver && matchData.status === 'ongoing' && (
                <div className="flex justify-center p-md text-[10px] text-tertiary/50 tracking-widest animate-pulse font-label-caps">
                  {currentTurnLabel}
                </div>

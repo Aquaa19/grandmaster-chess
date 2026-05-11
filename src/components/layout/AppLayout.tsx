@@ -1,7 +1,5 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/components/layout/AppLayout.tsx
-
 import React from 'react';
-import { Home, Bot, Users, History, Settings, UserCircle } from 'lucide-react';
+import { Home, Bot, Users, History, Settings, UserCircle, User } from 'lucide-react';
 import type { ScreenState } from '../../App';
 
 interface AppLayoutProps {
@@ -24,6 +22,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: 'ai', label: 'AI Match', icon: Bot },
     { id: 'local', label: 'Local Play', icon: Users },
     { id: 'history', label: 'History', icon: History },
+    { id: 'profile', label: 'Profile', icon: User },
   ] as const;
 
   return (
@@ -32,13 +31,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <nav className="hidden md:flex h-screen w-64 fixed left-0 top-0 bg-surface-container border-r border-white/5 flex-col gap-md p-lg z-40">
         <div className="mb-xl">
           <h1 className="font-display-lg text-3xl text-primary tracking-tight">Grandmaster</h1>
-          <div className="flex items-center gap-sm mt-md">
-            <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center border border-white/10">
-               <UserCircle className="text-primary w-6 h-6" />
+          <div 
+            className="flex items-center gap-sm mt-md cursor-pointer hover:bg-surface-variant p-2 -ml-2 rounded-lg transition-colors group"
+            onClick={() => onNavigate('profile')}
+          >
+            <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 group-hover:border-tertiary/50 transition-colors">
+               <UserCircle className="text-primary w-6 h-6 group-hover:text-tertiary transition-colors" />
             </div>
             <div>
               <div className="font-title-md text-primary">{playerName}</div>
-              <div className="font-label-caps text-on-surface-variant">Rank: Novice</div>
+              <div className="font-label-caps text-on-surface-variant group-hover:text-tertiary/70 transition-colors">View Stats</div>
             </div>
           </div>
         </div>
