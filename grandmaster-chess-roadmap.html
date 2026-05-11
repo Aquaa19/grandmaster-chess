@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grandmaster Development Roadmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#141313',
+                        surface: '#1c1b1b',
+                        'surface-variant': '#2b2a2a',
+                        primary: '#c8c6c5',
+                        tertiary: '#e9c349',
+                        error: '#ffb4ab',
+                        'on-surface-variant': '#8e9192',
+                    },
+                    fontFamily: {
+                        display: ['EB Garamond', 'serif'],
+                        body: ['Manrope', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #141313; color: #c8c6c5; }
+        .glass { background: rgba(28, 27, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(200, 198, 197, 0.1); }
+        .step-number { color: #e9c349; font-family: 'EB Garamond', serif; font-size: 1.5rem; font-weight: 500; }
+        .done-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; padding: 2px 8px; border-radius: 9999px; background: rgba(233, 195, 73, 0.1); color: #e9c349; border: 1px solid rgba(233, 195, 73, 0.2); }
+        .file-tag { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.7rem; color: #8e9192; background: rgba(255,255,255,0.03); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body class="font-body antialiased min-h-screen p-6 md:p-12 selection:bg-tertiary/30">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-12 border-b border-white/10 pb-6 text-center">
+            <span class="text-tertiary text-4xl mb-4 block">♔</span>
+            <h1 class="font-display text-4xl md:text-5xl text-primary mb-2">Grandmaster Chess</h1>
+            <p class="text-on-surface-variant text-lg tracking-widest uppercase">Development Roadmap v3.3</p>
+            <p class="text-sm mt-4 text-primary/60 border border-tertiary/30 bg-tertiary/5 inline-block px-4 py-2 rounded">
+                <strong>Protocol Active:</strong> One file at a time. Explicit permission required before proceeding to the next step.
+            </p>
+        </header>
+
+        <div class="space-y-8">
+            
+            <!-- Completed Phases Collapsed -->
+            <section class="glass rounded-xl p-6 md:p-8 opacity-60">
+                <div class="flex justify-between items-center border-b border-white/10 pb-2 mb-4">
+                    <h2 class="font-display text-2xl text-tertiary">Phases 1-10: Foundation & Single Player</h2>
+                    <span class="done-badge">✓ Complete</span>
+                </div>
+                <p class="text-sm text-on-surface-variant">Architecture, Firebase Auth, Chess Hooks, Local/AI UI, Campaign Progression, and Replay System are fully implemented.</p>
+            </section>
+
+            <!-- Phase 11 -->
+            <section class="glass rounded-xl p-6 md:p-8 ring-1 ring-tertiary/50">
+                <div class="flex justify-between items-center border-b border-white/10 pb-2 mb-6">
+                    <h2 class="font-display text-2xl text-tertiary">Phase 11: Online Multiplayer & Competitive Play</h2>
+                    <span class="text-xs uppercase tracking-widest text-primary/50 font-bold bg-white/5 px-2 py-1 rounded">Next Up</span>
+                </div>
+                
+                <ul class="space-y-6">
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">30</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Real-Time Sync & Matchmaking Infrastructure</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Build the foundation for online play while preserving Local Multiplayer. Utilize Firestore <code>onSnapshot</code> listeners to strictly sync FEN, PGN, and clocks between two remote clients.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/hooks/useOnlineChess.ts</span>
+                                <span class="file-tag">src/screens/OnlineMatchScreen.tsx</span>
+                                <span class="file-tag">src/screens/OnlineLobbyScreen.tsx</span>
+                                <span class="file-tag">src/screens/HomeScreen.tsx</span>
+                                <span class="file-tag">src/App.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">31</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Distinct Online Progression & XP</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Strictly separate <code>aiStats</code> from <code>onlineStats</code>. Online matches feature isolated XP tracks, unique win/loss ratios, and exclusive multiplayer achievements (e.g., "Network Grandmaster").</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/screens/ProfileScreen.tsx</span>
+                                <span class="file-tag">src/components/layout/AppLayout.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">32</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Elo Rating & Global Leaderboards</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Implement the Elo formula to adjust ratings dynamically after online matches. Build a global board sorting top 50 players by competitive rank.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/utils/elo.ts</span>
+                                <span class="file-tag">src/screens/LeaderboardScreen.tsx</span>
+                                <span class="file-tag">src/components/layout/AppLayout.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Phase 12 -->
+            <section class="glass rounded-xl p-6 md:p-8">
+                <h2 class="font-display text-2xl text-tertiary border-b border-white/10 pb-2 mb-6">Phase 12: Advanced AI & Match Analysis</h2>
+                
+                <ul class="space-y-6">
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">33</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">True Stockfish Integration (WASM)</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Upgrade AI from basic Minimax to Stockfish.js (WebAssembly) running in a background Web Worker to keep the UI responsive.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/workers/stockfish.worker.ts</span>
+                                <span class="file-tag">src/screens/SinglePlayerScreen.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">34</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Post-Game Analysis & Evaluation Bar</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Add a thermometer evaluation bar and move annotations (Blunder, Brilliant) to the Replay engine.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/components/chess/EvaluationBar.tsx</span>
+                                <span class="file-tag">src/screens/ReplayScreen.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Phase 13 -->
+            <section class="glass rounded-xl p-6 md:p-8">
+                <h2 class="font-display text-2xl text-tertiary border-b border-white/10 pb-2 mb-6">Phase 13: Training & Customization</h2>
+                
+                <ul class="space-y-6">
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">35</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Puzzles & Tactics Trainer</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Dedicated screen fetching FEN-based tactical puzzles from open databases with move validation.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/screens/PuzzlesScreen.tsx</span>
+                                <span class="file-tag">src/App.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">36</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Theming (Board & Pieces)</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Allow customization of board colors and piece sets, saved to user preferences in Firestore.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/components/chess/ChessBoard.tsx</span>
+                                <span class="file-tag">src/screens/SettingsScreen.tsx</span>
+                                <span class="file-tag">src/index.css</span>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Phase 14 -->
+            <section class="glass rounded-xl p-6 md:p-8">
+                <h2 class="font-display text-2xl text-tertiary border-b border-white/10 pb-2 mb-6">Phase 14: Core Engine Enhancements</h2>
+                
+                <ul class="space-y-6">
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">37</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">Advanced Time Controls</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Implement move increments (Fisher time) for Blitz and Rapid modes in all game hooks.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/hooks/useChessGame.ts</span>
+                                <span class="file-tag">src/hooks/useOnlineChess.ts</span>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-4">
+                        <span class="step-number">38</span>
+                        <div>
+                            <h3 class="text-xl text-primary font-medium mb-1">PGN Import / Export</h3>
+                            <p class="text-on-surface-variant mb-2 text-sm">Allow users to download match notation or paste external PGN data to analyze in the replay viewer.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="file-tag">src/screens/ReplayScreen.tsx</span>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+        </div>
+    </div>
+</body>
+</html>

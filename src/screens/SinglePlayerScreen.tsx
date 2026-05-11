@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Bot, UserCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Crown, Loader2, Search, Trophy, Star, Pause, Play, Undo2, RotateCcw
+  Crown, Loader2, Search, Trophy, Star, Pause, Play, Undo2, RotateCcw, AlertCircle
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { collection, setDoc, doc, updateDoc, increment, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { collection, setDoc, getDocs, doc, updateDoc, increment, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { Chess } from 'chess.js';
 import type { Square, Move } from 'chess.js';
 import { db, appId } from '../config/firebase';
@@ -125,8 +125,9 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     blackTime,
     matchId, // Extracted the live match ID
     isPaused,
-    togglePause
-  } = useChessGame();
+    togglePause,
+    loadGame // Smart Resume function
+  } = useChessGame() as any;
   
   const [aiLevel, setAiLevel] = useState<number>(3); // Default to Intermediate
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -136,6 +137,10 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
   // Progression UI State
   const [xpEarned, setXpEarned] = useState(0);
   const [medalsEarned, setMedalsEarned] = useState<string[]>([]);
+
+  // New States for Blocker & Resuming
+  const [isResuming, setIsResuming] = useState(true);
+  const [showBlockWarning, setShowBlockWarning] = useState(false);
 
   const groupedMoves = [];
   for (let i = 0; i < moveHistory.length; i += 2) {
@@ -147,10 +152,73 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     });
   }
 
-  // --- Trigger AI Move ---
+  // --- 1. SMART RESUME EFFECT ---
   useEffect(() => {
-    // Block AI from thinking or making moves if paused
-    if (turn === 'b' && !isGameOver && !isPaused) {
+    const fetchOngoingMatch = async () => {
+      if (!user) {
+        setIsResuming(false);
+        return;
+      }
+      try {
+        const matchesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'matches');
+        const snapshot = await getDocs(matchesRef);
+        
+        let latestOngoing: any = null;
+        let maxTime = 0;
+
+        // Find the most recent ongoing AI match
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.type === 'ai_match' && data.status === 'ongoing') {
+            const time = data.lastUpdated?.toMillis?.() || 0;
+            if (time > maxTime) {
+              maxTime = time;
+              latestOngoing = data;
+            }
+          }
+        });
+
+        // If an ongoing match is found, load its exact state into the engine
+        if (latestOngoing && loadGame) {
+          loadGame(latestOngoing.moves, latestOngoing.id, latestOngoing.whiteTime, latestOngoing.blackTime);
+          if (latestOngoing.ai_level) {
+            setAiLevel(latestOngoing.ai_level); // Restore exact difficulty tier
+          }
+          // Auto-pause it so the user can orient themselves before timers/AI resume
+          if (!isPaused) togglePause();
+        }
+      } catch (e) {
+        console.error("Error fetching ongoing AI match", e);
+      } finally {
+        setIsResuming(false);
+      }
+    };
+
+    fetchOngoingMatch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // --- 2. NAVIGATION BLOCKER EFFECT ---
+  useEffect(() => {
+    const handleNavClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // If clicking on the sidebar/bottom nav AND game is active AND not paused
+      if (target.closest('nav') && !isPaused && !isCheckmate && moveHistory.length > 0) {
+        e.stopPropagation(); 
+        e.preventDefault();
+        setShowBlockWarning(true);
+        setTimeout(() => setShowBlockWarning(false), 3000);
+      }
+    };
+
+    document.addEventListener('click', handleNavClick, true);
+    return () => document.removeEventListener('click', handleNavClick, true);
+  }, [isPaused, isCheckmate, moveHistory.length]);
+
+  // --- 3. Trigger AI Move ---
+  useEffect(() => {
+    // Block AI from thinking or making moves if paused or resuming
+    if (turn === 'b' && !isGameOver && !isPaused && !isResuming) {
       setIsAiThinking(true);
       
       const timer = setTimeout(() => {
@@ -163,12 +231,11 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
 
       return () => clearTimeout(timer);
     }
-  }, [turn, isGameOver, game, makeMove, aiLevel, isPaused]);
+  }, [turn, isGameOver, game, makeMove, aiLevel, isPaused, isResuming]);
 
-  // --- LIVE SYNC EFFECT ---
-  // Continuously syncs the match to Firestore on every move
+  // --- 4. LIVE SYNC EFFECT ---
   useEffect(() => {
-    if (!user || moveHistory.length === 0) return;
+    if (!user || moveHistory.length === 0 || isResuming) return;
 
     const liveSyncMatch = async () => {
       try {
@@ -181,7 +248,9 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           ai_level: aiLevel,
           status: isCheckmate ? 'completed' : 'ongoing',
           winner: isCheckmate ? (playerWon ? 'Player' : 'Stockfish AI') : null,
-          moves: moveHistory.map(m => m.san),
+          moves: moveHistory.map((m: any) => m.san),
+          whiteTime: whiteTime,
+          blackTime: blackTime,
           lastUpdated: serverTimestamp()
         }, { merge: true });
         
@@ -191,9 +260,9 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     };
 
     liveSyncMatch();
-  }, [moveHistory, isCheckmate, turn, user, matchId, aiLevel]);
+  }, [moveHistory, isCheckmate, turn, user, matchId, aiLevel, whiteTime, blackTime, isResuming]);
 
-  // --- Campaign Progression (XP & Medals) Only on Checkmate ---
+  // --- 5. Campaign Progression (XP & Medals) Only on Checkmate ---
   useEffect(() => {
     if (isCheckmate && !matchSaved && user) {
       const saveProgression = async () => {
@@ -250,8 +319,26 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     handlePreviewMove(lastMove.to);
   };
 
+  // Show loading screen while reconstructing timeline
+  if (isResuming) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-md fade-slide-up">
+        <Loader2 className="w-12 h-12 text-tertiary animate-spin" />
+        <p className="font-label-caps text-on-surface-variant tracking-widest text-[10px] animate-pulse">RECOVERING CAMPAIGN DATA...</p>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Navigation Blocker Toast Alert */}
+      {showBlockWarning && (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-error text-on-error px-xl py-md rounded-full shadow-[0_10px_40px_rgba(255,180,171,0.3)] font-title-md flex items-center gap-md animate-in slide-in-from-top-4 fade-in">
+           <AlertCircle className="w-6 h-6" /> 
+           Please Pause or Complete the match before leaving!
+        </div>
+      )}
+
       {/* Board Container */}
       <div className="flex-1 flex flex-col items-center justify-center min-w-0">
         
@@ -298,6 +385,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
               <div className="flex flex-col items-center gap-sm">
                  <Pause className="w-16 h-16 text-tertiary animate-pulse" />
                  <span className="font-label-caps text-tertiary tracking-widest uppercase">Paused</span>
+                 <p className="font-body-sm text-on-surface-variant mt-2 text-center">Safe to navigate away.<br/>Your progress is saved.</p>
               </div>
             </div>
           )}
@@ -406,8 +494,9 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
             min="1" 
             max="5" 
             value={aiLevel}
+            disabled={moveHistory.length > 0} // Lock difficulty after first move
             onChange={(e) => setAiLevel(Number(e.target.value))}
-            className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary focus:outline-none focus:ring-2 focus:ring-tertiary/50 relative z-10" 
+            className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary focus:outline-none focus:ring-2 focus:ring-tertiary/50 relative z-10 disabled:opacity-50 disabled:cursor-not-allowed" 
           />
           <div className="text-center mt-md font-title-md text-tertiary relative z-10 bg-tertiary/10 py-1 rounded border border-tertiary/20">
             {AI_LEVEL_NAMES[aiLevel - 1]}
@@ -470,7 +559,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
                 Match ID: {matchId.split('-')[0]}
              </div>
              <button onClick={handleResetGame} className="w-full py-md text-error font-title-md text-title-md rounded hover:bg-error/10 transition-colors border border-error/20 active:scale-95">
-               Resign
+               Abandon Match
              </button>
           </div>
         </div>

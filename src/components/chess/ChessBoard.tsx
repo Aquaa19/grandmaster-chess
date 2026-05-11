@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Chess } from 'chess.js';
 import type { Square, Color, PieceSymbol, Move } from 'chess.js';
 
-// --- SVG Piece Components based on your HTML design ---
+// --- SVG Piece Components ---
 const SVGs: Record<PieceSymbol, string> = {
   p: "M12,2A3,3 0 0,1 15,5A3,3 0 0,1 12,8A3,3 0 0,1 9,5A3,3 0 0,1 12,2M16,18H8V20H16V18M15,10H9A2,2 0 0,0 7,12V16H17V12A2,2 0 0,0 15,10Z",
   r: "M5,20H19V18H5V20M19,9H15V3H9V9H5V15H19V9M17,13H7V11H9V5H15V11H17V13Z",
@@ -27,7 +27,8 @@ const PieceIcon = ({ type, color }: { type: PieceSymbol; color: Color }) => (
 
 interface ChessBoardProps {
   fen: string;
-  onMove: (source: string, target: string) => boolean;
+  // Updated type to accept both synchronous and asynchronous move handlers
+  onMove: (source: string, target: string) => boolean | Promise<boolean>;
   flipped?: boolean;
   inCheckSquare?: Square | null;
   previewMoveSquare?: Square | null;
@@ -45,20 +46,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   
-  // Initialize local instance to parse the board state and calculate valid moves
   const game = new Chess(fen);
   const board = game.board();
 
-  // Get valid moves for the currently selected piece
   const validMoves: Move[] = selectedSquare ? game.moves({ square: selectedSquare, verbose: true }) as Move[] : [];
   const validTargetSquares = validMoves.map(m => m.to);
-  // Captures include 'c' (standard capture) or 'e' (en passant)
   const validCaptures = validMoves.filter(m => m.flags.includes('c') || m.flags.includes('e')).map(m => m.to);
 
-  const handleSquareClick = (square: Square) => {
-    // If a square is selected and the clicked square is a valid target, execute move
+  const handleSquareClick = async (square: Square) => {
     if (selectedSquare && validTargetSquares.includes(square)) {
-      const success = onMove(selectedSquare, square);
+      // Logic now awaits the move if it's a Promise (for online play)
+      const moveResult = onMove(selectedSquare, square);
+      const success = moveResult instanceof Promise ? await moveResult : moveResult;
+      
       if (success) {
         setSelectedSquare(null);
       }
@@ -67,9 +67,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const piece = game.get(square);
 
-    // If clicking a piece of the current turn's color, select it
     if (piece && piece.color === game.turn()) {
-      // If clicking the same selected piece, deselect it
       if (selectedSquare === square) {
         setSelectedSquare(null);
       } else {
@@ -78,21 +76,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       return;
     }
 
-    // If clicking an empty square or opponent piece that isn't a valid move, deselect
     setSelectedSquare(null);
   };
 
-  // Determine row and col based on flip state
   const displayBoard = flipped ? [...board].reverse().map(row => [...row].reverse()) : board;
   const displayFiles = flipped ? [...FILES].reverse() : FILES;
   const displayRanks = flipped ? [...RANKS].reverse() : RANKS;
 
   return (
     <div className="aspect-square w-full max-w-[800px] bg-primary-container p-unit rounded-lg border border-white/10 shadow-2xl relative overflow-hidden">
-      {/* Inner glow/stroke */}
       <div className="absolute inset-0 border border-white/10 rounded-lg pointer-events-none z-10" />
       
-      {/* 8x8 Grid */}
       <div className="w-full h-full grid grid-cols-8 grid-rows-8 gap-0 rounded-DEFAULT overflow-hidden relative">
         {displayBoard.map((row, rowIndex) => 
           row.map((piece, colIndex) => {
@@ -103,15 +97,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isLightSquare = (rowIndex + colIndex) % 2 === 0;
             const isSelected = selectedSquare === squareName;
             
-            // Check if this square is a valid target or capture
             const isValidEmptyTarget = validTargetSquares.includes(squareName) && !validCaptures.includes(squareName);
             const isCaptureTarget = validCaptures.includes(squareName);
             
-            // Checks and highlights
             const isKingInCheck = inCheckSquare === squareName;
             const isPreview = previewMoveSquare === squareName;
 
-            // Coordinate labels
             const showRank = colIndex === (flipped ? 7 : 0);
             const showFile = rowIndex === (flipped ? 0 : 7);
 
@@ -127,41 +118,34 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   ${isKingInCheck ? 'bg-error/40 shadow-[inset_0_0_30px_var(--color-error)] animate-pulse' : ''}
                 `}
               >
-                {/* Highlight ring for selected piece or previewed move */}
                 {(isSelected || isPreview) && (
                   <div className="absolute inset-0 border-2 border-tertiary/70 z-20 pointer-events-none" />
                 )}
 
-                {/* Dot indicator for valid empty moves */}
                 {isValidEmptyTarget && (
                   <div className="absolute w-[20%] h-[20%] rounded-full bg-tertiary/40 pointer-events-none z-20" />
                 )}
 
-                {/* Ring indicator for valid capture moves */}
                 {isCaptureTarget && (
                   <div className="absolute inset-0 border-2 border-error/70 z-20 pointer-events-none" />
                 )}
                 
-                {/* Extra warning border if in check */}
                 {isKingInCheck && (
                   <div className="absolute inset-0 border-2 border-error z-20 pointer-events-none animate-pulse" />
                 )}
 
-                {/* Rank Number (Left) */}
                 {showRank && (
                   <span className="absolute top-1 left-1 text-[10px] text-on-surface-variant/50 font-mono-stats select-none z-30">
                     {rank}
                   </span>
                 )}
 
-                {/* File Letter (Bottom) */}
                 {showFile && (
                   <span className="absolute bottom-1 right-1 text-[10px] text-on-surface-variant/50 font-mono-stats select-none z-30">
                     {file}
                   </span>
                 )}
 
-                {/* The Piece */}
                 {piece && (
                   <div className={`w-full h-full flex items-center justify-center z-10 ${isSelected || isPreview ? 'scale-110' : ''} transition-transform`}>
                     <PieceIcon type={piece.type} color={piece.color} />

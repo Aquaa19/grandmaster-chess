@@ -1,3 +1,5 @@
+// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/App.tsx
+
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
@@ -12,9 +14,21 @@ import { LocalMultiplayerScreen } from './screens/LocalMultiplayerScreen';
 import { SinglePlayerScreen } from './screens/SinglePlayerScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
+import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
+import { OnlineMatchScreen } from './screens/OnlineMatchScreen';
 import { AppLayout } from './components/layout/AppLayout';
 
-export type ScreenState = 'login' | 'profile' | 'home' | 'local' | 'ai' | 'history' | 'replay';
+// Updated ScreenState to include Online Multiplayer routes
+export type ScreenState = 
+  | 'login' 
+  | 'profile' 
+  | 'home' 
+  | 'local' 
+  | 'ai' 
+  | 'history' 
+  | 'replay' 
+  | 'online_lobby' 
+  | 'online_match';
 
 declare global {
   interface Window {
@@ -37,7 +51,7 @@ export default function App() {
         if ((window as any).__initial_auth_token) {
           await signInWithCustomToken(auth, (window as any).__initial_auth_token);
         } else {
-          if (typeof window.__firebase_config !== 'undefined') {
+          if (typeof window.__firebase_config !== 'undefined' && window.__firebase_config) {
             await signInAnonymously(auth);
           }
         }
@@ -58,6 +72,7 @@ export default function App() {
       }
 
       try {
+        // Rule 1: Namespaced path for profile data
         const profileRef = doc(db, 'artifacts', appId, 'users', u.uid, 'profile', 'data');
         const docSnap = await getDoc(profileRef);
 
@@ -79,7 +94,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Enhanced navigation handler to capture match IDs when routing
+  /**
+   * Navigation handler that supports passing match IDs for 
+   * Replay and Online Match screens.
+   */
   const handleNavigate = (screen: ScreenState, matchId?: string) => {
     if (matchId) {
       setSelectedMatchId(matchId);
@@ -92,7 +110,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-md">
           <Loader2 className="w-12 h-12 text-tertiary animate-spin" />
-          <p className="font-label-caps text-on-surface-variant animate-pulse tracking-widest">INITIALIZING ARENA...</p>
+          <p className="font-label-caps text-on-surface-variant animate-pulse tracking-widest uppercase">Initializing Arena...</p>
         </div>
       </div>
     );
@@ -114,11 +132,44 @@ export default function App() {
       onNavigate={handleNavigate as any}
       playerName={playerName}
     >
-      {currentScreen === 'home' && <HomeScreen onNavigate={handleNavigate as any} />}
-      {currentScreen === 'local' && <LocalMultiplayerScreen user={user} />}
-      {currentScreen === 'ai' && <SinglePlayerScreen user={user} />}
-      {currentScreen === 'history' && <HistoryScreen user={user} onNavigate={handleNavigate} />}
-      {currentScreen === 'replay' && <ReplayScreen user={user} matchId={selectedMatchId as string} onNavigate={handleNavigate} />}
+      {currentScreen === 'home' && (
+        <HomeScreen onNavigate={handleNavigate as any} />
+      )}
+      
+      {currentScreen === 'local' && (
+        <LocalMultiplayerScreen user={user} />
+      )}
+      
+      {currentScreen === 'ai' && (
+        <SinglePlayerScreen user={user} />
+      )}
+      
+      {currentScreen === 'history' && (
+        <HistoryScreen user={user} onNavigate={handleNavigate} />
+      )}
+      
+      {currentScreen === 'replay' && (
+        <ReplayScreen 
+          user={user} 
+          matchId={selectedMatchId as string} 
+          onNavigate={handleNavigate} 
+        />
+      )}
+
+      {currentScreen === 'online_lobby' && (
+        <OnlineLobbyScreen 
+          user={user} 
+          onNavigate={handleNavigate as any} 
+        />
+      )}
+
+      {currentScreen === 'online_match' && (
+        <OnlineMatchScreen 
+          user={user} 
+          matchId={selectedMatchId as string} 
+          onNavigate={handleNavigate as any} 
+        />
+      )}
     </AppLayout>
   );
 }
