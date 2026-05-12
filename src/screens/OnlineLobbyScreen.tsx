@@ -236,7 +236,7 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
       )}
 
       {matchmakingStatus === 'searching' && (
-        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center gap-8 min-h-[400px] w-full min-w-[320px] md:min-w-[500px] max-w-lg mx-auto">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center gap-8 min-h-[400px] w-full min-w-[320px] md:min-w-[500px] max-w-[512px] mx-auto">
           <div className="relative shrink-0">
             <div className="w-32 h-32 rounded-full border-4 border-yellow-500/10 border-t-yellow-500 animate-spin" />
             <Globe className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-yellow-500 animate-pulse" />
@@ -278,7 +278,7 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
                 <h3 className="text-2xl font-serif text-slate-200 mb-1">Lobby Ready</h3>
                 <p className="text-sm text-slate-400">Share this key with your opponent.</p>
               </div>
-              <div className="flex w-full max-w-sm gap-2">
+              <div className="flex w-full max-w-[384px] gap-2">
                 <div className="flex-1 bg-slate-950 border border-white/10 rounded-lg py-3 px-6 text-center font-mono text-2xl tracking-widest text-yellow-500">
                   {createdMatchId}
                 </div>
@@ -306,7 +306,7 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
               <h3 className="text-2xl font-serif text-slate-200 mb-1">Join Existing Room</h3>
               <p className="text-sm text-slate-400">Enter a valid Match Key.</p>
             </div>
-            <div className="w-full max-w-sm flex gap-2">
+            <div className="w-full max-w-[384px] flex gap-2">
               <input 
                 type="text" 
                 placeholder="EX: A1B2C3D4"

@@ -67,7 +67,7 @@ export const CreateProfileScreen: React.FC<CreateProfileScreenProps> = ({ user, 
         <div className="absolute bottom-[-20%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-primary/5 blur-[100px]" />
       </div>
 
-      <main className="w-full max-w-md mx-auto relative z-10 glass-panel rounded-2xl p-8 md:p-12 shadow-2xl">
+      <main className="w-full max-w-[448px] mx-auto relative z-10 glass-panel rounded-2xl p-8 md:p-12 shadow-2xl">
         <div className="text-center mb-8">
           <h1 className="font-display-lg text-4xl text-primary mb-2">Create Profile</h1>
           <p className="font-body-lg text-on-surface-variant">Forging your identity on the board.</p>

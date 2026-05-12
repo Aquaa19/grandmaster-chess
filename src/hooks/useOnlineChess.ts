@@ -1,8 +1,11 @@
+// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/hooks/useOnlineChess.ts
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Chess } from 'chess.js';
-import type { Move, Square } from 'chess.js';
-import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, increment, getDoc } from 'firebase/firestore';
+import type { Move } from 'chess.js';
+import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, increment, getDoc, runTransaction } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
+import { calculateNewElo } from '../utils/elo';
 
 export interface OnlineMatchState {
   fen: string;
@@ -103,7 +106,7 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
     return () => clearInterval(interval);
   }, [matchData?.status, matchData?.turn]);
 
-  // Process XP and Stats on Match End
+  // Process XP and Elo Stats on Match End
   useEffect(() => {
     if (!matchData || !userId || xpProcessed.current) return;
     
@@ -111,29 +114,51 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
       xpProcessed.current = true;
       const profileRef = doc(db, 'artifacts', appId, 'users', userId, 'profile', 'data');
 
-      let xpChange = 0;
-      let winChange = 0;
-      let lossChange = 0;
+      const processEndGame = async () => {
+        try {
+          const userSnap = await getDoc(profileRef);
+          const userData = userSnap.data() || {};
+          
+          const myElo = userData.onlineStats?.elo || 1200;
+          const oppElo = opponentProfile?.onlineStats?.elo || 1200;
 
-      if (matchData.winnerId === userId) {
-        xpChange = 50; 
-        winChange = 1;
-      } else if (matchData.winnerId && matchData.winnerId !== userId) {
-        xpChange = -50; 
-        lossChange = 1;
-      }
+          let xpChange = 0;
+          let winChange = 0;
+          let lossChange = 0;
+          let actualScore: 1 | 0.5 | 0 = 0.5; // Default draw
 
-      if (xpChange !== 0 || winChange !== 0 || lossChange !== 0) {
-        setDoc(profileRef, {
-          onlineStats: {
-            xp: increment(xpChange),
-            wins: increment(winChange),
-            losses: increment(lossChange),
+          if (matchData.winnerId === userId) {
+            xpChange = 50; 
+            winChange = 1;
+            actualScore = 1;
+          } else if (matchData.winnerId && matchData.winnerId !== userId) {
+            xpChange = -50; 
+            lossChange = 1;
+            actualScore = 0;
           }
-        }, { merge: true }).catch(e => console.error("Failed to update stats", e));
-      }
+
+          const newElo = calculateNewElo(myElo, oppElo, actualScore);
+          const eloChange = newElo - myElo;
+
+          if (xpChange !== 0 || winChange !== 0 || lossChange !== 0 || eloChange !== 0) {
+            // Using setDoc with merge handles initializing the object if it doesn't exist
+            await setDoc(profileRef, {
+              onlineStats: {
+                xp: increment(xpChange),
+                wins: increment(winChange),
+                losses: increment(lossChange),
+                elo: increment(eloChange)
+              }
+            }, { merge: true });
+          }
+        } catch (e) {
+          console.error("Failed to update post-match stats", e);
+        }
+      };
+
+      processEndGame();
     }
-  }, [matchData?.status, matchData?.winnerId, userId]);
+  }, [matchData?.status, matchData?.winnerId, userId, opponentProfile]);
 
   // Make Move
   const makeOnlineMove = useCallback(async (source: string, target: string, promotion: string = 'q') => {
@@ -178,19 +203,29 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
 
   // Acceptance Logic
   const acceptMatch = useCallback(async () => {
-    if (!matchId || !matchData || !playerColor) return;
+    if (!matchId || !playerColor) return;
     const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
     
-    const field = playerColor === 'w' ? 'whiteAccepted' : 'blackAccepted';
-    const otherField = playerColor === 'w' ? matchData.blackAccepted : matchData.whiteAccepted;
-    
-    const updates: any = { [field]: true };
-    if (otherField) {
-      updates.status = 'ongoing';
+    try {
+      await runTransaction(db, async (transaction) => {
+        const matchDoc = await transaction.get(matchRef);
+        if (!matchDoc.exists()) return;
+        
+        const data = matchDoc.data() as OnlineMatchState;
+        const field = playerColor === 'w' ? 'whiteAccepted' : 'blackAccepted';
+        const otherField = playerColor === 'w' ? data.blackAccepted : data.whiteAccepted;
+        
+        const updates: any = { [field]: true };
+        if (otherField) {
+          updates.status = 'ongoing';
+        }
+        
+        transaction.update(matchRef, updates);
+      });
+    } catch (e) {
+      console.error("Transaction failed: ", e);
     }
-    
-    await updateDoc(matchRef, updates);
-  }, [matchId, matchData, playerColor]);
+  }, [matchId, playerColor]);
 
   const rejectMatch = useCallback(async () => {
     if (!matchId) return;

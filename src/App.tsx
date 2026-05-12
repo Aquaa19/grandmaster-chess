@@ -15,6 +15,7 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
 import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
 import { OnlineMatchScreen } from './screens/OnlineMatchScreen';
+import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { AppLayout } from './components/layout/AppLayout';
 
 export type ScreenState = 
@@ -27,7 +28,8 @@ export type ScreenState =
   | 'history' 
   | 'replay' 
   | 'online_lobby' 
-  | 'online_match';
+  | 'online_match'
+  | 'leaderboard';
 
 declare global {
   interface Window {
@@ -141,8 +143,12 @@ export default function App() {
         <ProfileScreen user={user} />
       )}
 
+      {currentScreen === 'leaderboard' && (
+        <LeaderboardScreen user={user} />
+      )}
+
       {currentScreen === 'home' && (
-        <HomeScreen onNavigate={handleNavigate as any} />
+        <HomeScreen user={user} onNavigate={handleNavigate as any} />
       )}
       
       {currentScreen === 'local' && (

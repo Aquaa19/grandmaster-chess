@@ -1,16 +1,41 @@
 // /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/HomeScreen.tsx
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bot, Users, ArrowRight, Trophy, Globe, Zap } from 'lucide-react';
+import type { User as FirebaseUser } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db, appId } from '../config/firebase';
 
-// Locally defined to ensure compatibility with the updated router
 export type ScreenState = 'login' | 'profile' | 'home' | 'local' | 'ai' | 'history' | 'replay' | 'online_lobby' | 'online_match';
 
 interface HomeScreenProps {
+  user?: FirebaseUser | null; // Added user prop to fetch stats
   onNavigate: (screen: ScreenState) => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({ user, onNavigate }) => {
+  const [profileData, setProfileData] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    const unsubscribe = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfileData(docSnap.data());
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Aggregate Stats
+  const aiXp = profileData?.aiStats?.xp || 0;
+  const onlineXp = profileData?.onlineStats?.xp || 0;
+  const totalXp = aiXp + onlineXp;
+  const totalMedals = profileData?.medals?.length || 0;
+  const currentElo = profileData?.onlineStats?.elo || 1200; // Prepped for Step 32
+
   return (
     <div className="w-full flex flex-col gap-xl max-w-4xl mx-auto fade-slide-up pt-md">
       
@@ -41,7 +66,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           </div>
         </button>
 
-        {/* Online Ranked Card (NEW) */}
+        {/* Online Ranked Card */}
         <button 
           onClick={() => onNavigate('online_lobby')}
           className="glass-panel rounded-2xl p-lg flex flex-col items-start text-left group hover:border-blue-400/50 transition-all duration-300 relative overflow-hidden bg-blue-500/5"
@@ -87,18 +112,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       <div className="mt-lg glass-panel rounded-xl p-md flex items-center justify-around border-t-2 border-t-tertiary/50">
         <div className="text-center">
           <div className="font-label-caps text-on-surface-variant text-[10px] tracking-widest uppercase">Total XP</div>
-          <div className="font-mono-stats text-tertiary text-xl">0</div>
+          <div className="font-mono-stats text-tertiary text-xl">{totalXp}</div>
         </div>
         <div className="w-px h-12 bg-white/10" />
         <div className="text-center">
           <div className="font-label-caps text-on-surface-variant text-[10px] tracking-widest uppercase">Online Elo</div>
-          <div className="font-mono-stats text-blue-400 text-xl">1200</div>
+          <div className="font-mono-stats text-blue-400 text-xl">{currentElo}</div>
         </div>
         <div className="w-px h-12 bg-white/10" />
         <div className="text-center">
           <div className="font-label-caps text-on-surface-variant text-[10px] tracking-widest uppercase">Medals</div>
           <div className="font-mono-stats text-tertiary text-xl flex items-center justify-center gap-xs">
-            <Trophy className="w-4 h-4" /> 0
+            <Trophy className="w-4 h-4" /> {totalMedals}
           </div>
         </div>
       </div>

@@ -143,7 +143,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
           {/* Status Overlays */}
           {matchData.status === 'pending' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
-               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
                   <ShieldCheck className="w-12 h-12 text-tertiary mb-4 shrink-0" />
                   <h2 className="font-display-lg text-3xl text-primary mb-6 whitespace-nowrap shrink-0">Match Found</h2>
                   
@@ -197,7 +197,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
 
           {matchData.status === 'rejected' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
-               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
                   <AlertCircle className="w-16 h-16 text-error mb-4 shrink-0" />
                   <h2 className="font-display-lg text-3xl text-primary mb-4 whitespace-nowrap shrink-0">Match Cancelled</h2>
                   <p className="font-body-lg text-on-surface-variant mb-8 w-full shrink-0">
@@ -229,7 +229,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
 
           {matchData.status === 'resigned' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in fade-in zoom-in-95 duration-300 overflow-visible">
-              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
                 <Crown className={`w-16 h-16 mb-4 shrink-0 drop-shadow-[0_0_15px_rgba(233,195,73,0.5)] ${matchData.winnerId === user?.uid ? 'text-tertiary' : 'text-on-surface-variant'}`} />
                 <h2 className="font-display-lg text-3xl md:text-4xl text-primary mb-4 whitespace-nowrap shrink-0">
                   {matchData.winnerId === user?.uid ? 'Opponent Resigned' : 'Match Conceded'}
@@ -251,7 +251,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
 
           {isCheckmate && matchData.status !== 'resigned' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 overflow-visible">
-              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-md shrink-0">
+              <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
                 <Crown className="w-16 h-16 text-tertiary mb-4 shrink-0 drop-shadow-[0_0_15px_rgba(233,195,73,0.5)]" />
                 <h2 className="font-display-lg text-4xl text-primary mb-4 whitespace-nowrap shrink-0">Checkmate</h2>
                 <p className="font-body-lg text-on-surface-variant mb-6 w-full shrink-0">

@@ -1,7 +1,5 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/LocalMultiplayerScreen.tsx
-
 import React, { useState, useEffect } from 'react';
-import { Users, FlipVertical, Undo2, RotateCcw, Crown, Search, Pause, Play, Loader2, AlertCircle } from 'lucide-react';
+import { Users, FlipVertical, Undo2, RotateCcw, Crown, Search, Pause, Play, Loader2, AlertCircle, Settings2 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, serverTimestamp } from 'firebase/firestore';
 import type { Square } from 'chess.js';
@@ -13,7 +11,6 @@ interface LocalMultiplayerScreenProps {
   user: FirebaseUser | null;
 }
 
-// Utility to format seconds into MM:SS
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -35,18 +32,17 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
     matchId, 
     isPaused,
     togglePause,
-    loadGame // Added this to hook destructuring (Will implement in next step)
-  } = useChessGame() as any; // Temporary 'any' until we update the hook types
+    loadGame
+  } = useChessGame() as any; 
   
   const [isFlipped, setIsFlipped] = useState(false);
   const [matchSaved, setMatchSaved] = useState(false);
   const [previewMoveSquare, setPreviewMoveSquare] = useState<Square | null>(null);
+  const [customMatchName, setCustomMatchName] = useState<string>('');
   
-  // New States for Blocker & Resuming
-  const [isResuming, setIsResuming] = useState(true);
+  const [matchPhase, setMatchPhase] = useState<'loading' | 'setup' | 'playing'>('loading');
   const [showBlockWarning, setShowBlockWarning] = useState(false);
 
-  // Group moves into pairs (White, Black) and keep raw move data for previewing
   const groupedMoves = [];
   for (let i = 0; i < moveHistory.length; i += 2) {
     groupedMoves.push({
@@ -61,7 +57,7 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
   useEffect(() => {
     const fetchOngoingMatch = async () => {
       if (!user) {
-        setIsResuming(false);
+        setMatchPhase('setup');
         return;
       }
       try {
@@ -71,7 +67,6 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
         let latestOngoing: any = null;
         let maxTime = 0;
 
-        // Find the most recent ongoing local match
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
           if (data.type === 'local' && data.status === 'ongoing') {
@@ -83,16 +78,19 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
           }
         });
 
-        // If an ongoing match is found, load its exact state into the engine
         if (latestOngoing && loadGame) {
           loadGame(latestOngoing.moves, latestOngoing.id, latestOngoing.whiteTime, latestOngoing.blackTime);
-          // Auto-pause it so the user can orient themselves before timers resume
+          if (latestOngoing.matchName) {
+            setCustomMatchName(latestOngoing.matchName);
+          }
           if (!isPaused) togglePause();
+          setMatchPhase('playing');
+        } else {
+          setMatchPhase('setup');
         }
       } catch (e) {
         console.error("Error fetching ongoing match", e);
-      } finally {
-        setIsResuming(false);
+        setMatchPhase('setup');
       }
     };
 
@@ -104,24 +102,21 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
   useEffect(() => {
     const handleNavClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // If clicking on the sidebar/bottom nav AND game is active AND not paused
-      if (target.closest('nav') && !isPaused && !isCheckmate && moveHistory.length > 0) {
-        e.stopPropagation(); // Stop the click from reaching the navigation buttons
+      if (target.closest('nav') && !isPaused && !isCheckmate && moveHistory.length > 0 && matchPhase === 'playing') {
+        e.stopPropagation(); 
         e.preventDefault();
         setShowBlockWarning(true);
         setTimeout(() => setShowBlockWarning(false), 3000);
       }
     };
 
-    // Attach to capture phase so we intercept before the button's onClick fires
     document.addEventListener('click', handleNavClick, true);
     return () => document.removeEventListener('click', handleNavClick, true);
-  }, [isPaused, isCheckmate, moveHistory.length]);
+  }, [isPaused, isCheckmate, moveHistory.length, matchPhase]);
 
-  // --- 3. LIVE SYNC EFFECT (Updated to save times) ---
+  // --- 3. LIVE SYNC EFFECT ---
   useEffect(() => {
-    // Don't sync if we are currently loading the old match state
-    if (!user || moveHistory.length === 0 || isResuming) return; 
+    if (!user || moveHistory.length === 0 || matchPhase !== 'playing') return; 
 
     const liveSyncMatch = async () => {
       try {
@@ -130,10 +125,11 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
         await setDoc(matchRef, {
           id: matchId,
           type: 'local',
+          matchName: customMatchName || 'Local Match',
           status: isCheckmate ? 'completed' : 'ongoing',
           winner: isCheckmate ? (turn === 'w' ? 'Black' : 'White') : null,
           moves: moveHistory.map((m: any) => m.san),
-          whiteTime: whiteTime, // Save exact clock times
+          whiteTime: whiteTime, 
           blackTime: blackTime,
           lastUpdated: serverTimestamp()
         }, { merge: true });
@@ -147,11 +143,30 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
     };
 
     liveSyncMatch();
-  }, [moveHistory, isCheckmate, turn, user, matchId, whiteTime, blackTime, isResuming]);
+  }, [moveHistory, isCheckmate, turn, user, matchId, whiteTime, blackTime, matchPhase, customMatchName]);
 
+  // Triggered after checkmate
   const handleResetGame = () => {
     resetGame();
     setMatchSaved(false); 
+    setCustomMatchName('');
+    setMatchPhase('setup');
+  };
+
+  // Triggered when explicitly abandoning an ongoing match
+  const handleAbandonMatch = async () => {
+    if (user && matchId) {
+      try {
+        const matchRef = doc(db, 'artifacts', appId, 'users', user.uid, 'matches', matchId);
+        await setDoc(matchRef, { 
+          status: 'abandoned', 
+          lastUpdated: serverTimestamp() 
+        }, { merge: true });
+      } catch (e) {
+        console.error("Failed to abandon match", e);
+      }
+    }
+    handleResetGame();
   };
 
   const handlePreviewMove = (targetSquare: string) => {
@@ -165,8 +180,7 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
     handlePreviewMove(lastMove.to);
   };
 
-  // Show loading screen while reconstructing timeline
-  if (isResuming) {
+  if (matchPhase === 'loading') {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-md fade-slide-up">
         <Loader2 className="w-12 h-12 text-tertiary animate-spin" />
@@ -177,7 +191,6 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
 
   return (
     <>
-      {/* Navigation Blocker Toast Alert */}
       {showBlockWarning && (
         <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-error text-on-error px-xl py-md rounded-full shadow-[0_10px_40px_rgba(255,180,171,0.3)] font-title-md flex items-center gap-md animate-in slide-in-from-top-4 fade-in">
            <AlertCircle className="w-6 h-6" /> 
@@ -185,28 +198,25 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
         </div>
       )}
 
-      {/* Left/Top Panel: Player 2, Board, Player 1 */}
       <div className="flex-1 flex flex-col gap-lg max-w-[800px] mx-auto w-full">
         
-        {/* Top Player Profile (Black) */}
-        <div className={`glass-panel rounded-xl p-md flex justify-between items-center opacity-80 transition-all duration-300 ${turn === 'b' ? 'border-b-2 border-b-tertiary opacity-100 shadow-[0_4px_20px_rgba(233,195,73,0.1)]' : ''}`}>
+        <div className={`glass-panel rounded-xl p-md flex justify-between items-center opacity-80 transition-all duration-300 ${turn === 'b' && matchPhase === 'playing' ? 'border-b-2 border-b-tertiary opacity-100 shadow-[0_4px_20px_rgba(233,195,73,0.1)]' : ''}`}>
           <div className="flex items-center gap-md">
             <div className="w-12 h-12 rounded-full bg-surface-variant overflow-hidden border border-white/10 flex items-center justify-center">
               <Users className="text-on-surface-variant w-6 h-6" />
             </div>
             <div>
               <div className="font-title-md text-title-md text-primary">Guest Player</div>
-              <div className={`font-label-caps text-label-caps transition-colors ${turn === 'b' ? 'text-tertiary' : 'text-on-surface-variant'}`}>
-                Black Pieces {turn === 'b' && '• Your Turn'}
+              <div className={`font-label-caps text-label-caps transition-colors ${turn === 'b' && matchPhase === 'playing' ? 'text-tertiary' : 'text-on-surface-variant'}`}>
+                Black Pieces {turn === 'b' && matchPhase === 'playing' && '• Your Turn'}
               </div>
             </div>
           </div>
-          <div className={`font-mono-stats text-mono-stats px-md py-sm bg-surface-container rounded-lg border transition-all duration-300 ${turn === 'b' && !isCheckmate && !isPaused ? 'text-tertiary border-tertiary/50 animate-pulse shadow-[0_0_15px_rgba(233,195,73,0.2)]' : 'text-on-surface-variant border-white/5'}`}>
+          <div className={`font-mono-stats text-mono-stats px-md py-sm bg-surface-container rounded-lg border transition-all duration-300 ${turn === 'b' && !isCheckmate && !isPaused && matchPhase === 'playing' ? 'text-tertiary border-tertiary/50 animate-pulse shadow-[0_0_15px_rgba(233,195,73,0.2)]' : 'text-on-surface-variant border-white/5'}`}>
             {formatTime(blackTime ?? 600)}
           </div>
         </div>
 
-        {/* The Chessboard Container */}
         <div className="relative w-full max-w-[800px] mx-auto">
           <ChessBoard 
             fen={fen} 
@@ -215,9 +225,36 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
             inCheckSquare={inCheckSquare}
             previewMoveSquare={previewMoveSquare}
           />
+
+          {/* Setup Match Modal */}
+          {matchPhase === 'setup' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
+                  <Settings2 className="w-12 h-12 text-tertiary mb-4 shrink-0" />
+                  <h2 className="font-display-lg text-3xl text-primary mb-2 whitespace-nowrap shrink-0">Local Match Setup</h2>
+                  <p className="text-sm text-on-surface-variant mb-6 shrink-0 w-full">Configure your over-the-board match details.</p>
+                  
+                  <div className="w-full space-y-5 mb-6 text-left shrink-0">
+                    <div>
+                      <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps block mb-2">Match Name (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Coffeehouse Blitz"
+                        value={customMatchName}
+                        onChange={(e) => setCustomMatchName(e.target.value)}
+                        className="w-full bg-surface-container text-on-surface font-body-sm border border-white/20 rounded-lg py-3 px-4 focus:outline-none focus:border-tertiary transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <button onClick={() => setMatchPhase('playing')} className="w-full bg-tertiary hover:bg-yellow-400 text-on-tertiary font-title-md py-3 rounded-lg active:scale-95 transition-all shadow-lg shadow-tertiary/20 shrink-0">
+                    Start Match
+                  </button>
+               </div>
+            </div>
+          )}
           
-          {/* Pause Overlay */}
-          {isPaused && !isCheckmate && (
+          {isPaused && !isCheckmate && matchPhase === 'playing' && (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-lg border border-white/10">
               <div className="flex flex-col items-center gap-sm">
                  <Pause className="w-16 h-16 text-tertiary animate-pulse" />
@@ -227,9 +264,9 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
             </div>
           )}
 
-          {isCheckmate && (
+          {isCheckmate && matchPhase === 'playing' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md rounded-lg border border-tertiary/30 transition-all duration-500 animate-in fade-in zoom-in-95 p-4">
-              <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-md max-h-[90%] overflow-y-auto custom-scrollbar">
+              <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-[448px] max-h-[90%] overflow-y-auto custom-scrollbar">
                 <Crown className="w-16 h-16 text-tertiary mb-sm drop-shadow-[0_0_15px_rgba(233,195,73,0.5)] shrink-0" />
                 <h2 className="font-display-lg text-display-lg text-primary mb-xs">Checkmate</h2>
                 <p className="font-body-lg text-on-surface-variant mb-lg">
@@ -248,62 +285,62 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
           )}
         </div>
 
-        {/* Bottom Player Profile (White) */}
-        <div className={`glass-panel rounded-xl p-md flex justify-between items-center transition-all duration-300 ${turn === 'w' ? 'border-b-2 border-b-tertiary opacity-100 shadow-[0_4px_20px_rgba(233,195,73,0.1)]' : 'opacity-80'}`}>
+        <div className={`glass-panel rounded-xl p-md flex justify-between items-center transition-all duration-300 ${turn === 'w' && matchPhase === 'playing' ? 'border-b-2 border-b-tertiary opacity-100 shadow-[0_4px_20px_rgba(233,195,73,0.1)]' : 'opacity-80'}`}>
           <div className="flex items-center gap-md">
-            <div className={`w-12 h-12 rounded-full bg-surface-variant overflow-hidden border ${turn === 'w' ? 'border-tertiary/50' : 'border-white/10'} flex items-center justify-center`}>
+            <div className={`w-12 h-12 rounded-full bg-surface-variant overflow-hidden border ${turn === 'w' && matchPhase === 'playing' ? 'border-tertiary/50' : 'border-white/10'} flex items-center justify-center`}>
               <Users className="text-primary w-6 h-6" />
             </div>
             <div>
               <div className="font-title-md text-title-md text-primary">Player 1</div>
-              <div className={`font-label-caps text-label-caps transition-colors ${turn === 'w' ? 'text-tertiary' : 'text-on-surface-variant'}`}>
-                White Pieces {turn === 'w' && '• Your Turn'}
+              <div className={`font-label-caps text-label-caps transition-colors ${turn === 'w' && matchPhase === 'playing' ? 'text-tertiary' : 'text-on-surface-variant'}`}>
+                White Pieces {turn === 'w' && matchPhase === 'playing' && '• Your Turn'}
               </div>
             </div>
           </div>
-          <div className={`font-mono-stats text-mono-stats px-md py-sm bg-surface-container rounded-lg border transition-all duration-300 ${turn === 'w' && !isCheckmate && !isPaused ? 'text-tertiary border-tertiary/50 animate-pulse shadow-[0_0_15px_rgba(233,195,73,0.2)]' : 'text-on-surface-variant border-white/5'}`}>
+          <div className={`font-mono-stats text-mono-stats px-md py-sm bg-surface-container rounded-lg border transition-all duration-300 ${turn === 'w' && !isCheckmate && !isPaused && matchPhase === 'playing' ? 'text-tertiary border-tertiary/50 animate-pulse shadow-[0_0_15px_rgba(233,195,73,0.2)]' : 'text-on-surface-variant border-white/5'}`}>
             {formatTime(whiteTime ?? 600)}
           </div>
         </div>
       </div>
 
-      {/* Right Panel: Controls & Move History */}
       <div className="w-full xl:w-[320px] flex flex-col gap-lg">
         
-        {/* Minimalist Controls */}
         <div className="glass-panel rounded-xl p-md flex justify-between items-center">
-          <button onClick={togglePause} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95 group" title={isPaused ? "Resume Game" : "Pause Game"}>
+          <button onClick={togglePause} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95 group disabled:opacity-50" title={isPaused ? "Resume Game" : "Pause Game"}>
             {isPaused ? <Play className="w-6 h-6 text-tertiary" /> : <Pause className="w-6 h-6" />}
             <span className="font-label-caps text-[10px]">{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
           
           <div className="w-px h-8 bg-white/10" />
 
-          <button onClick={() => setIsFlipped(!isFlipped)} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 group" title="Flip Board">
+          <button onClick={() => setIsFlipped(!isFlipped)} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 group disabled:opacity-50" title="Flip Board">
             <FlipVertical className="w-6 h-6 group-hover:rotate-180 transition-transform duration-500" />
             <span className="font-label-caps text-[10px]">Flip</span>
           </button>
           
           <div className="w-px h-8 bg-white/10" />
           
-          <button onClick={undoMove} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95" title="Undo Move">
+          <button onClick={undoMove} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 disabled:opacity-50" title="Undo Move">
             <Undo2 className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Undo</span>
           </button>
           
           <div className="w-px h-8 bg-white/10" />
           
-          <button onClick={previewLastMove} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95" title="Preview Last Move">
+          <button onClick={previewLastMove} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95 disabled:opacity-50" title="Preview Last Move">
             <Search className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Preview</span>
           </button>
         </div>
 
-        {/* Move History */}
         <div className="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-h-[300px]">
           <div className="p-md border-b border-white/5 flex justify-between items-center bg-surface-container/50">
             <h2 className="font-title-md text-title-md text-primary">Match Log</h2>
-            <span className="font-label-caps text-label-caps text-on-surface-variant bg-surface-variant px-sm py-xs rounded">LIVE</span>
+            {matchPhase === 'playing' ? (
+               <span className="bg-surface-variant text-on-surface-variant font-label-caps text-label-caps px-sm py-xs rounded">LIVE</span>
+            ) : (
+               <span className="bg-surface-variant/50 text-on-surface-variant/50 font-label-caps text-label-caps px-sm py-xs rounded">SETUP</span>
+            )}
           </div>
           
           <div className="flex-1 overflow-y-auto p-sm font-mono-stats text-body-sm custom-scrollbar">
@@ -334,7 +371,7 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
                 </div>
               ))}
               
-              {!isCheckmate && (
+              {!isCheckmate && matchPhase === 'playing' && (
                 <div className="grid grid-cols-[30px_1fr_1fr] px-md py-sm hover:bg-surface-variant/50 rounded transition-colors relative mt-1">
                   <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-tertiary" />
                   <div className="text-on-surface-variant/50">{groupedMoves.length + 1}.</div>
@@ -350,10 +387,15 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
           </div>
           
           <div className="p-md border-t border-white/5 bg-surface-container/50 flex flex-col gap-sm">
+             {customMatchName && (
+               <div className="text-center font-mono-stats text-[10px] text-tertiary tracking-widest uppercase mb-1 truncate">
+                 {customMatchName}
+               </div>
+             )}
              <div className="text-center font-mono-stats text-[10px] text-on-surface-variant/40 tracking-widest uppercase">
                 Match ID: {matchId.split('-')[0]}
              </div>
-             <button onClick={handleResetGame} className="w-full py-md text-error font-title-md text-title-md rounded hover:bg-error/10 transition-colors border border-error/20 active:scale-95">
+             <button onClick={handleAbandonMatch} disabled={matchPhase === 'setup'} className="w-full py-md text-error font-title-md text-title-md rounded hover:bg-error/10 transition-colors border border-error/20 active:scale-95 disabled:opacity-50">
                Abandon Match
              </button>
           </div>

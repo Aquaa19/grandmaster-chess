@@ -1,14 +1,11 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/SinglePlayerScreen.tsx
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Bot, UserCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Crown, Loader2, Search, Trophy, Star, Pause, Play, Undo2, RotateCcw, AlertCircle
+  Bot, UserCircle, Crown, Loader2, Search, Trophy, Star, 
+  Pause, Play, Undo2, RotateCcw, AlertCircle, Settings2
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { collection, setDoc, getDocs, doc, updateDoc, increment, arrayUnion, serverTimestamp } from 'firebase/firestore';
-import { Chess } from 'chess.js';
-import type { Square, Move } from 'chess.js';
+import type { Square } from 'chess.js';
 import { db, appId } from '../config/firebase';
 import { useChessGame } from '../hooks/useChessGame';
 import { ChessBoard } from '../components/chess/ChessBoard';
@@ -19,94 +16,20 @@ interface SinglePlayerScreenProps {
 
 const AI_LEVEL_NAMES = ['Novice', 'Amateur', 'Intermediate', 'Expert', 'Grandmaster'];
 
-// Utility to format seconds into MM:SS
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-// --- Custom AI Engine Logic (Minimax with Alpha-Beta Pruning) ---
-const evaluateBoard = (chess: Chess, usePosition: boolean) => {
-  const board = chess.board();
-  let value = 0;
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 8; j++) {
-      const p = board[i][j];
-      if (p) {
-        let pVal = 0;
-        switch(p.type) {
-          case 'p': pVal = 10; break;
-          case 'n': pVal = 30; break;
-          case 'b': pVal = 30; break;
-          case 'r': pVal = 50; break;
-          case 'q': pVal = 90; break;
-          case 'k': pVal = 900; break;
-        }
-        // Grandmaster positional awareness (control the center)
-        if (usePosition) {
-          if (i >= 3 && i <= 4 && j >= 3 && j <= 4) pVal += 2;
-        }
-        value += (p.color === 'w' ? pVal : -pVal);
-      }
-    }
-  }
-  return value;
-};
-
-const getBestMove = (gameFen: string, level: number): Move | null => {
-  const g = new Chess(gameFen);
-  const moves = g.moves({ verbose: true }) as Move[];
-  if (moves.length === 0) return null;
-
-  // Level 1: Novice (Random Moves)
-  if (level === 1) return moves[Math.floor(Math.random() * moves.length)];
-
-  let bestMove: Move | null = null;
-  let bestValue = 9999; // AI is Black, trying to minimize White's score
-  
-  // Set depth based on level (L2: Depth 1, L3: Depth 2, L4/L5: Depth 3)
-  let depth = level === 2 ? 1 : level === 3 ? 2 : 3;
-
-  const minimax = (gCopy: Chess, d: number, alpha: number, beta: number, isMax: boolean): number => {
-    if (d === 0 || gCopy.isGameOver()) return evaluateBoard(gCopy, level === 5);
-    const possMoves = gCopy.moves();
-    
-    if (isMax) {
-      let maxVal = -9999;
-      for (let m of possMoves) {
-        gCopy.move(m);
-        maxVal = Math.max(maxVal, minimax(gCopy, d - 1, alpha, beta, !isMax));
-        gCopy.undo();
-        alpha = Math.max(alpha, maxVal);
-        if (beta <= alpha) break;
-      }
-      return maxVal;
-    } else {
-      let minVal = 9999;
-      for (let m of possMoves) {
-        gCopy.move(m);
-        minVal = Math.min(minVal, minimax(gCopy, d - 1, alpha, beta, !isMax));
-        gCopy.undo();
-        beta = Math.min(beta, minVal);
-        if (beta <= alpha) break;
-      }
-      return minVal;
-    }
+// Map Campaign Tiers to Stockfish parameters
+const getStockfishConfig = (level: number) => {
+  const skillMap = { 1: 0, 2: 5, 3: 10, 4: 15, 5: 20 };
+  const depthMap = { 1: 1, 2: 3, 3: 5, 4: 10, 5: 15 };
+  return {
+    skill: skillMap[level as keyof typeof skillMap] || 10,
+    depth: depthMap[level as keyof typeof depthMap] || 5
   };
-
-  for (let m of moves) {
-    g.move(m);
-    const boardVal = minimax(g, depth - 1, -10000, 10000, true);
-    g.undo();
-    
-    if (boardVal < bestValue) {
-      bestValue = boardVal;
-      bestMove = m;
-    }
-  }
-  
-  return bestMove || moves[Math.floor(Math.random() * moves.length)];
 };
 
 export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) => {
@@ -123,24 +46,25 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     resetGame,
     whiteTime,
     blackTime,
-    matchId, // Extracted the live match ID
+    matchId, 
     isPaused,
     togglePause,
-    loadGame // Smart Resume function
+    loadGame 
   } = useChessGame() as any;
   
-  const [aiLevel, setAiLevel] = useState<number>(3); // Default to Intermediate
+  const [aiLevel, setAiLevel] = useState<number>(3); 
+  const [customMatchName, setCustomMatchName] = useState<string>(''); 
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [matchSaved, setMatchSaved] = useState(false);
   const [previewMoveSquare, setPreviewMoveSquare] = useState<Square | null>(null);
   
-  // Progression UI State
   const [xpEarned, setXpEarned] = useState(0);
   const [medalsEarned, setMedalsEarned] = useState<string[]>([]);
 
-  // New States for Blocker & Resuming
-  const [isResuming, setIsResuming] = useState(true);
+  const [matchPhase, setMatchPhase] = useState<'loading' | 'setup' | 'playing'>('loading');
   const [showBlockWarning, setShowBlockWarning] = useState(false);
+
+  const workerRef = useRef<Worker | null>(null);
 
   const groupedMoves = [];
   for (let i = 0; i < moveHistory.length; i += 2) {
@@ -152,11 +76,39 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     });
   }
 
+  // --- 0. INITIALIZE STOCKFISH WORKER DIRECTLY ---
+  useEffect(() => {
+    // Because stockfish.js is in /public, we load it from the root URL
+    workerRef.current = new Worker('/stockfish.js');
+    
+    workerRef.current.onmessage = (e: MessageEvent) => {
+      const line = typeof e.data === 'string' ? e.data : '';
+      
+      if (line && line.startsWith('bestmove')) {
+        const move = line.split(' ')[1]; 
+        if (move && move !== '(none)') {
+          const from = move.slice(0, 2);
+          const to = move.slice(2, 4);
+          const promotion = move.length === 5 ? move[4] : 'q';
+          makeMove(from, to, promotion);
+        }
+        setIsAiThinking(false);
+      }
+    };
+
+    workerRef.current.postMessage('uci');
+    workerRef.current.postMessage('isready');
+
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, [makeMove]);
+
   // --- 1. SMART RESUME EFFECT ---
   useEffect(() => {
     const fetchOngoingMatch = async () => {
       if (!user) {
-        setIsResuming(false);
+        setMatchPhase('setup');
         return;
       }
       try {
@@ -166,7 +118,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
         let latestOngoing: any = null;
         let maxTime = 0;
 
-        // Find the most recent ongoing AI match
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
           if (data.type === 'ai_match' && data.status === 'ongoing') {
@@ -178,19 +129,22 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           }
         });
 
-        // If an ongoing match is found, load its exact state into the engine
         if (latestOngoing && loadGame) {
           loadGame(latestOngoing.moves, latestOngoing.id, latestOngoing.whiteTime, latestOngoing.blackTime);
           if (latestOngoing.ai_level) {
-            setAiLevel(latestOngoing.ai_level); // Restore exact difficulty tier
+            setAiLevel(latestOngoing.ai_level); 
           }
-          // Auto-pause it so the user can orient themselves before timers/AI resume
+          if (latestOngoing.matchName) {
+            setCustomMatchName(latestOngoing.matchName); 
+          }
           if (!isPaused) togglePause();
+          setMatchPhase('playing');
+        } else {
+          setMatchPhase('setup');
         }
       } catch (e) {
         console.error("Error fetching ongoing AI match", e);
-      } finally {
-        setIsResuming(false);
+        setMatchPhase('setup');
       }
     };
 
@@ -202,8 +156,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
   useEffect(() => {
     const handleNavClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // If clicking on the sidebar/bottom nav AND game is active AND not paused
-      if (target.closest('nav') && !isPaused && !isCheckmate && moveHistory.length > 0) {
+      if (target.closest('nav') && !isPaused && !isCheckmate && moveHistory.length > 0 && matchPhase === 'playing') {
         e.stopPropagation(); 
         e.preventDefault();
         setShowBlockWarning(true);
@@ -213,29 +166,29 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
 
     document.addEventListener('click', handleNavClick, true);
     return () => document.removeEventListener('click', handleNavClick, true);
-  }, [isPaused, isCheckmate, moveHistory.length]);
+  }, [isPaused, isCheckmate, moveHistory.length, matchPhase]);
 
-  // --- 3. Trigger AI Move ---
+  // --- 3. TRIGGER RAW UCI STOCKFISH MOVE ---
   useEffect(() => {
-    // Block AI from thinking or making moves if paused or resuming
-    if (turn === 'b' && !isGameOver && !isPaused && !isResuming) {
+    if (turn === 'b' && !isGameOver && !isPaused && matchPhase === 'playing') {
       setIsAiThinking(true);
       
       const timer = setTimeout(() => {
-        const bestMove = getBestMove(game.fen(), aiLevel);
-        if (bestMove) {
-          makeMove(bestMove.from, bestMove.to, bestMove.promotion);
+        if (workerRef.current) {
+          const config = getStockfishConfig(aiLevel);
+          workerRef.current.postMessage(`setoption name Skill Level value ${config.skill}`);
+          workerRef.current.postMessage(`position fen ${game.fen()}`);
+          workerRef.current.postMessage(`go depth ${config.depth}`);
         }
-        setIsAiThinking(false);
-      }, 150); 
+      }, 100); 
 
       return () => clearTimeout(timer);
     }
-  }, [turn, isGameOver, game, makeMove, aiLevel, isPaused, isResuming]);
+  }, [turn, isGameOver, game, aiLevel, isPaused, matchPhase]);
 
   // --- 4. LIVE SYNC EFFECT ---
   useEffect(() => {
-    if (!user || moveHistory.length === 0 || isResuming) return;
+    if (!user || moveHistory.length === 0 || matchPhase !== 'playing') return;
 
     const liveSyncMatch = async () => {
       try {
@@ -245,6 +198,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
         await setDoc(matchRef, {
           id: matchId,
           type: 'ai_match',
+          matchName: customMatchName || 'AI Campaign', 
           ai_level: aiLevel,
           status: isCheckmate ? 'completed' : 'ongoing',
           winner: isCheckmate ? (playerWon ? 'Player' : 'Stockfish AI') : null,
@@ -260,16 +214,15 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     };
 
     liveSyncMatch();
-  }, [moveHistory, isCheckmate, turn, user, matchId, aiLevel, whiteTime, blackTime, isResuming]);
+  }, [moveHistory, isCheckmate, turn, user, matchId, aiLevel, whiteTime, blackTime, matchPhase, customMatchName]);
 
-  // --- 5. Campaign Progression (XP & Medals) Only on Checkmate ---
+  // --- 5. Campaign Progression ---
   useEffect(() => {
-    if (isCheckmate && !matchSaved && user) {
+    if (isCheckmate && !matchSaved && user && matchPhase === 'playing') {
       const saveProgression = async () => {
         try {
           const playerWon = turn === 'b'; 
 
-          // Process XP and Medals
           if (playerWon) {
             const earned = aiLevel * 150; 
             setXpEarned(earned);
@@ -282,14 +235,17 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
 
             const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
             await updateDoc(profileRef, {
-              xp: increment(earned),
-              wins: increment(1),
+              'aiStats.xp': increment(earned),
+              'aiStats.wins': increment(1),
               ...(newMedals.length > 0 && { medals: arrayUnion(...newMedals) })
             });
           } else {
             setXpEarned(25); 
             const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
-            await updateDoc(profileRef, { xp: increment(25) });
+            await updateDoc(profileRef, { 
+              'aiStats.xp': increment(25),
+              'aiStats.losses': increment(1)
+            });
           }
 
           setMatchSaved(true);
@@ -299,13 +255,30 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
       };
       saveProgression();
     }
-  }, [isCheckmate, matchSaved, user, turn, aiLevel]);
+  }, [isCheckmate, matchSaved, user, turn, aiLevel, matchPhase]);
 
   const handleResetGame = () => {
     resetGame();
     setMatchSaved(false); 
     setXpEarned(0);
     setMedalsEarned([]);
+    setCustomMatchName('');
+    setMatchPhase('setup'); 
+  };
+
+  const handleAbandonMatch = async () => {
+    if (user && matchId) {
+      try {
+        const matchRef = doc(db, 'artifacts', appId, 'users', user.uid, 'matches', matchId);
+        await setDoc(matchRef, { 
+          status: 'abandoned', 
+          lastUpdated: serverTimestamp() 
+        }, { merge: true });
+      } catch (e) {
+        console.error("Failed to abandon match", e);
+      }
+    }
+    handleResetGame();
   };
 
   const handlePreviewMove = (targetSquare: string) => {
@@ -319,8 +292,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
     handlePreviewMove(lastMove.to);
   };
 
-  // Show loading screen while reconstructing timeline
-  if (isResuming) {
+  if (matchPhase === 'loading') {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-md fade-slide-up">
         <Loader2 className="w-12 h-12 text-tertiary animate-spin" />
@@ -331,7 +303,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
 
   return (
     <>
-      {/* Navigation Blocker Toast Alert */}
       {showBlockWarning && (
         <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-error text-on-error px-xl py-md rounded-full shadow-[0_10px_40px_rgba(255,180,171,0.3)] font-title-md flex items-center gap-md animate-in slide-in-from-top-4 fade-in">
            <AlertCircle className="w-6 h-6" /> 
@@ -339,10 +310,8 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
         </div>
       )}
 
-      {/* Board Container */}
       <div className="flex-1 flex flex-col items-center justify-center min-w-0">
         
-        {/* Opponent Info (AI) */}
         <div className="w-full max-w-[600px] flex justify-between items-center mb-md px-sm">
           <div className="flex items-center gap-md">
             <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center relative overflow-hidden border border-white/10">
@@ -369,7 +338,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           </div>
         </div>
 
-        {/* The Board with Relative Wrapper for Overlays */}
         <div className="relative w-full max-w-[600px] mx-auto">
           <ChessBoard 
             fen={fen} 
@@ -379,8 +347,50 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
             previewMoveSquare={previewMoveSquare}
           />
 
-          {/* Pause Overlay */}
-          {isPaused && !isCheckmate && (
+          {matchPhase === 'setup' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
+               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
+                  <Settings2 className="w-12 h-12 text-tertiary mb-4 shrink-0" />
+                  <h2 className="font-display-lg text-3xl text-primary mb-2 whitespace-nowrap shrink-0">Campaign Setup</h2>
+                  <p className="text-sm text-on-surface-variant mb-6 shrink-0 w-full">Configure your AI opponent and match details.</p>
+                  
+                  <div className="w-full space-y-5 mb-6 text-left shrink-0">
+                    <div>
+                      <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps block mb-2">Match Name (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., King's Indian Practice"
+                        value={customMatchName}
+                        onChange={(e) => setCustomMatchName(e.target.value)}
+                        className="w-full bg-surface-container text-on-surface font-body-sm border border-white/20 rounded-lg py-3 px-4 focus:outline-none focus:border-tertiary transition-colors"
+                      />
+                    </div>
+                    <div>
+                       <div className="flex justify-between items-center mb-2">
+                         <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Difficulty Tier</label>
+                         <span className="text-tertiary font-mono-stats text-sm">Tier {aiLevel}</span>
+                       </div>
+                       <input
+                         type="range" min="1" max="5" value={aiLevel}
+                         onChange={(e) => setAiLevel(Number(e.target.value))}
+                         className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary"
+                       />
+                       <div className="text-center mt-2 text-primary text-sm font-title-md">{AI_LEVEL_NAMES[aiLevel - 1]}</div>
+                    </div>
+                    <div className="bg-surface-variant/30 border border-white/5 rounded-lg p-4 flex justify-between items-center">
+                      <span className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Win Reward</span>
+                      <span className="text-green-400 font-bold font-mono-stats text-lg">+{aiLevel * 150} XP</span>
+                    </div>
+                  </div>
+
+                  <button onClick={() => setMatchPhase('playing')} className="w-full bg-tertiary hover:bg-yellow-400 text-on-tertiary font-title-md py-3 rounded-lg active:scale-95 transition-all shadow-lg shadow-tertiary/20 shrink-0">
+                    Start Match
+                  </button>
+               </div>
+            </div>
+          )}
+
+          {isPaused && !isCheckmate && matchPhase === 'playing' && (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-lg border border-white/10">
               <div className="flex flex-col items-center gap-sm">
                  <Pause className="w-16 h-16 text-tertiary animate-pulse" />
@@ -390,10 +400,9 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
             </div>
           )}
           
-          {/* Checkmate / Campaign Overlay Modal */}
-          {isCheckmate && (
+          {isCheckmate && matchPhase === 'playing' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md rounded-lg border border-tertiary/30 transition-all duration-500 animate-in fade-in zoom-in-95 p-4">
-              <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-md max-h-[90%] overflow-y-auto custom-scrollbar">
+              <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-[448px] max-h-[90%] overflow-y-auto custom-scrollbar">
                 
                 {turn === 'b' ? (
                   <>
@@ -409,7 +418,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
                   </>
                 )}
                 
-                {/* Progression Stats Display */}
                 {matchSaved ? (
                   <div className="w-full bg-surface-container rounded-lg p-md mb-lg border border-white/5 flex flex-col gap-sm shrink-0">
                     <div className="flex justify-between items-center text-sm">
@@ -435,7 +443,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           )}
         </div>
 
-        {/* Player Info */}
         <div className="w-full max-w-[600px] flex justify-between items-center mt-md px-sm">
           <div className="flex items-center gap-md">
             <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center border border-white/10">
@@ -453,32 +460,29 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
         </div>
       </div>
 
-      {/* Sidebar / Tools Area */}
       <aside className="w-full xl:w-[400px] flex flex-col gap-lg">
         
-        {/* Minimalist Controls */}
         <div className="glass-panel rounded-xl p-md flex justify-between items-center">
-          <button onClick={togglePause} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95 group" title={isPaused ? "Resume Game" : "Pause Game"}>
+          <button onClick={togglePause} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-tertiary transition-colors active:scale-95 group disabled:opacity-50" title={isPaused ? "Resume Game" : "Pause Game"}>
             {isPaused ? <Play className="w-6 h-6 text-tertiary" /> : <Pause className="w-6 h-6" />}
             <span className="font-label-caps text-[10px]">{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
           
           <div className="w-px h-8 bg-white/10" />
           
-          <button onClick={undoMove} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95" title="Undo Move">
+          <button onClick={undoMove} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 disabled:opacity-50" title="Undo Move">
             <Undo2 className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Undo</span>
           </button>
           
           <div className="w-px h-8 bg-white/10" />
           
-          <button onClick={handleResetGame} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-error transition-colors active:scale-95" title="Restart Match">
+          <button onClick={handleResetGame} disabled={matchPhase === 'setup'} className="flex flex-col items-center gap-xs text-on-surface-variant hover:text-error transition-colors active:scale-95 disabled:opacity-50" title="Restart Match">
             <RotateCcw className="w-6 h-6" />
             <span className="font-label-caps text-[10px]">Restart</span>
           </button>
         </div>
 
-        {/* AI Settings Card */}
         <div className="glass-panel rounded-lg p-lg relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-lg opacity-5 pointer-events-none group-hover:opacity-10 transition-opacity">
             <Bot className="w-24 h-24 text-tertiary" />
@@ -494,7 +498,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
             min="1" 
             max="5" 
             value={aiLevel}
-            disabled={moveHistory.length > 0} // Lock difficulty after first move
+            disabled={moveHistory.length > 0} 
             onChange={(e) => setAiLevel(Number(e.target.value))}
             className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary focus:outline-none focus:ring-2 focus:ring-tertiary/50 relative z-10 disabled:opacity-50 disabled:cursor-not-allowed" 
           />
@@ -503,7 +507,6 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           </div>
         </div>
 
-        {/* Move History */}
         <div className="flex-1 glass-panel rounded-lg overflow-hidden flex flex-col min-h-[300px]">
           <div className="p-md border-b border-white/10 bg-surface-container-high flex justify-between items-center">
             <h3 className="font-title-md text-title-md text-primary flex items-center gap-sm">
@@ -516,7 +519,11 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
                 <Search className="w-4 h-4" />
               </button>
             </h3>
-            <span className="bg-surface-variant text-on-surface-variant font-label-caps text-label-caps px-2 py-1 rounded tracking-widest text-[10px]">LIVE</span>
+            {matchPhase === 'playing' ? (
+               <span className="bg-surface-variant text-on-surface-variant font-label-caps text-label-caps px-2 py-1 rounded tracking-widest text-[10px]">LIVE</span>
+            ) : (
+               <span className="bg-surface-variant/50 text-on-surface-variant/50 font-label-caps text-label-caps px-2 py-1 rounded tracking-widest text-[10px]">SETUP</span>
+            )}
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -540,8 +547,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
               </div>
             ))}
             
-            {/* Current Turn Indicator in Log */}
-            {!isCheckmate && (
+            {!isCheckmate && matchPhase === 'playing' && (
               <div className="grid grid-cols-[40px_1fr_1fr] text-center font-mono-stats text-body-sm border-l-2 border-transparent">
                 <div className="p-sm text-on-surface-variant border-r border-white/5">{groupedMoves.length + 1}</div>
                 <div className={`p-sm transition-colors ${turn === 'w' && !isPaused ? 'text-tertiary animate-pulse' : 'text-primary'}`}>
@@ -555,10 +561,15 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
           </div>
 
           <div className="p-md border-t border-white/5 bg-surface-container/50 flex flex-col gap-sm">
+             {customMatchName && (
+               <div className="text-center font-mono-stats text-[10px] text-tertiary tracking-widest uppercase mb-1 truncate">
+                 {customMatchName}
+               </div>
+             )}
              <div className="text-center font-mono-stats text-[10px] text-on-surface-variant/40 tracking-widest uppercase">
                 Match ID: {matchId.split('-')[0]}
              </div>
-             <button onClick={handleResetGame} className="w-full py-md text-error font-title-md text-title-md rounded hover:bg-error/10 transition-colors border border-error/20 active:scale-95">
+             <button onClick={handleAbandonMatch} disabled={matchPhase === 'setup'} className="w-full py-md text-error font-title-md text-title-md rounded hover:bg-error/10 transition-colors border border-error/20 active:scale-95 disabled:opacity-50">
                Abandon Match
              </button>
           </div>
