@@ -80,7 +80,7 @@
 }
 
 @layer components {
-  /* Reusable Glassmorphism Panel from Design - Upgraded */
+  /* Reusable Glassmorphism Panel */
   .glass-panel {
     background: rgba(43, 42, 42, 0.4);
     backdrop-filter: blur(16px);
@@ -91,13 +91,20 @@
       inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   }
   
-  /* Chess Board Square Colors */
+  /* Chess Board Square Colors & Transitions */
   .board-square-light {
     background-color: var(--color-surface-container-high);
+    @apply transition-colors duration-500 ease-in-out;
   }
   
   .board-square-dark {
     background-color: var(--color-primary-container);
+    @apply transition-colors duration-500 ease-in-out;
+  }
+
+  /* Universal Board Transition Class for Custom Themes */
+  [class*="bg-emerald-"], [class*="bg-slate-"], [class*="bg-rose-"], [class*="bg-[#"] {
+    @apply transition-colors duration-500 ease-in-out;
   }
 
   /* Minimalist Custom Scrollbar */
@@ -129,5 +136,14 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Piece Interaction Shaders */
+  .piece-glow-white {
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+  }
+  
+  .piece-glow-black {
+    filter: drop-shadow(0 0 4px rgba(233, 195, 73, 0.2));
   }
 }

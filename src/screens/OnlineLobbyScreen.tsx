@@ -25,6 +25,12 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
   const [createdMatchId, setCreatedMatchId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTC, setSelectedTC] = useState(1); // Default to Rapid
+
+  const timeControls = [
+    { name: 'Blitz', initial: 180, increment: 2, icon: <Zap className="w-4 h-4" /> },
+    { name: 'Rapid', initial: 600, increment: 5, icon: <ShieldCheck className="w-4 h-4" /> },
+  ];
 
   useEffect(() => {
     if (matchmakingStatus !== 'searching' || !user) return;
@@ -37,6 +43,9 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
           userId: user.uid,
           userName: user.displayName || 'Anonymous Player',
           status: 'searching',
+          timeControl: timeControls[selectedTC].name,
+          initialTime: timeControls[selectedTC].initial,
+          increment: timeControls[selectedTC].increment,
           timestamp: serverTimestamp()
         });
 
@@ -63,8 +72,9 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
             status: 'pending',
             whiteAccepted: false,
             blackAccepted: false,
-            whiteTime: 600,
-            blackTime: 600,
+            whiteTime: timeControls[selectedTC].initial,
+            blackTime: timeControls[selectedTC].initial,
+            increment: timeControls[selectedTC].increment,
             fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
             pgn: '',
             lastUpdated: serverTimestamp()
@@ -115,8 +125,9 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
         status: 'waiting',
         whiteAccepted: false,
         blackAccepted: false,
-        whiteTime: 600,
-        blackTime: 600,
+        whiteTime: timeControls[selectedTC].initial,
+        blackTime: timeControls[selectedTC].initial,
+        increment: timeControls[selectedTC].increment,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         pgn: '',
         lastUpdated: serverTimestamp()
@@ -190,6 +201,29 @@ export const OnlineLobbyScreen: React.FC<OnlineLobbyScreenProps> = ({ user, onNa
         <div>
           <h2 className="text-3xl font-serif text-slate-200">Ranked Arena</h2>
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Competitive Multiplayer</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <label className="text-[10px] text-slate-500 uppercase tracking-widest font-sans font-bold">Select Time Control</label>
+        <div className="grid grid-cols-2 gap-4">
+          {timeControls.map((tc, idx) => (
+            <button
+              key={tc.name}
+              onClick={() => setSelectedTC(idx)}
+              className={`flex items-center justify-between p-4 rounded-xl border transition-all ${selectedTC === idx ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-slate-900/60 border-white/5 text-slate-400 hover:border-white/20'}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedTC === idx ? 'bg-yellow-500/20' : 'bg-slate-800'}`}>
+                  {tc.icon}
+                </div>
+                <div className="text-left">
+                  <div className="font-bold">{tc.name}</div>
+                  <div className="text-[10px] opacity-60 font-mono">{tc.initial / 60}m + {tc.increment}s</div>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 

@@ -4,6 +4,28 @@ import React, { useState } from 'react';
 import { Chess } from 'chess.js';
 import type { Square, Color, PieceSymbol, Move } from 'chess.js';
 
+// --- Theme Definitions ---
+export const BOARD_THEMES = {
+  default: { light: 'board-square-light', dark: 'board-square-dark', name: 'Grandmaster (Default)' },
+  classic: { light: 'bg-[#f0d9b5]', dark: 'bg-[#b58863]', name: 'Classic Wood' },
+  midnight: { light: 'bg-slate-400', dark: 'bg-slate-800', name: 'Midnight Blue' },
+  emerald: { light: 'bg-emerald-200', dark: 'bg-emerald-700', name: 'Emerald Park' },
+  coral: { light: 'bg-rose-200', dark: 'bg-rose-800', name: 'Coral Reef' },
+};
+
+export const PIECE_THEMES = {
+  standard: { w: 'fill-on-surface', b: 'fill-tertiary', name: 'Gold & Ivory' },
+  monochrome: { w: 'fill-white drop-shadow-md', b: 'fill-slate-900 drop-shadow-lg', name: 'Monochrome' },
+  neon: { 
+    w: 'fill-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]', 
+    b: 'fill-fuchsia-500 drop-shadow-[0_0_8px_rgba(217,70,239,0.8)]', 
+    name: 'Neon Cyber' 
+  },
+};
+
+export type BoardThemeKey = keyof typeof BOARD_THEMES;
+export type PieceThemeKey = keyof typeof PIECE_THEMES;
+
 // --- SVG Piece Components ---
 const SVGs: Record<PieceSymbol, string> = {
   p: "M12,2A3,3 0 0,1 15,5A3,3 0 0,1 12,8A3,3 0 0,1 9,5A3,3 0 0,1 12,2M16,18H8V20H16V18M15,10H9A2,2 0 0,0 7,12V16H17V12A2,2 0 0,0 15,10Z",
@@ -14,24 +36,26 @@ const SVGs: Record<PieceSymbol, string> = {
   k: "M19,22H5V20H19V22M17,10C15.58,10 14.26,10.77 13.5,12H13V7H15V5H13V3H11V5H9V7H11V12H10.5C9.74,10.77 8.42,10 7,10C4.79,10 3,11.79 3,14C3,16.21 4.79,18 7,18H17C19.21,18 21,16.21 21,14C21,11.79 19.21,10 17,10Z",
 };
 
-const PieceIcon = ({ type, color }: { type: PieceSymbol; color: Color }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    className={`w-[60%] h-[60%] lg:w-[75%] lg:h-[75%] transition-transform duration-200 ${
-      color === 'w' ? 'fill-on-surface' : 'fill-tertiary'
-    }`}
-  >
-    <path d={SVGs[type]} />
-  </svg>
-);
+const PieceIcon = ({ type, color, theme }: { type: PieceSymbol; color: Color; theme: PieceThemeKey }) => {
+  const themeClasses = PIECE_THEMES[theme][color];
+  return (
+    <svg 
+      viewBox="0 0 24 24" 
+      className={`w-[60%] h-[60%] lg:w-[75%] lg:h-[75%] transition-transform duration-200 ${themeClasses}`}
+    >
+      <path d={SVGs[type]} />
+    </svg>
+  );
+};
 
 interface ChessBoardProps {
   fen: string;
-  // Updated type to accept both synchronous and asynchronous move handlers
   onMove: (source: string, target: string) => boolean | Promise<boolean>;
   flipped?: boolean;
   inCheckSquare?: Square | null;
   previewMoveSquare?: Square | null;
+  boardTheme?: BoardThemeKey;
+  pieceTheme?: PieceThemeKey;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -42,7 +66,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   onMove, 
   flipped = false, 
   inCheckSquare = null,
-  previewMoveSquare = null
+  previewMoveSquare = null,
+  boardTheme = 'default',
+  pieceTheme = 'standard'
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   
@@ -55,7 +81,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const handleSquareClick = async (square: Square) => {
     if (selectedSquare && validTargetSquares.includes(square)) {
-      // Logic now awaits the move if it's a Promise (for online play)
       const moveResult = onMove(selectedSquare, square);
       const success = moveResult instanceof Promise ? await moveResult : moveResult;
       
@@ -83,6 +108,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const displayFiles = flipped ? [...FILES].reverse() : FILES;
   const displayRanks = flipped ? [...RANKS].reverse() : RANKS;
 
+  const currentBoardTheme = BOARD_THEMES[boardTheme] || BOARD_THEMES.default;
+
   return (
     <div className="aspect-square w-full max-w-[800px] bg-primary-container p-unit rounded-lg border border-white/10 shadow-2xl relative overflow-hidden">
       <div className="absolute inset-0 border border-white/10 rounded-lg pointer-events-none z-10" />
@@ -106,13 +133,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const showRank = colIndex === (flipped ? 7 : 0);
             const showFile = rowIndex === (flipped ? 0 : 7);
 
+            const squareColorClass = isLightSquare ? currentBoardTheme.light : currentBoardTheme.dark;
+
             return (
               <div 
                 key={squareName}
                 onClick={() => handleSquareClick(squareName)}
                 className={`
                   flex items-center justify-center relative cursor-pointer
-                  ${isLightSquare ? 'board-square-light' : 'board-square-dark'}
+                  ${squareColorClass}
                   ${isSelected || isPreview ? 'bg-tertiary/30' : ''}
                   ${isCaptureTarget ? 'bg-error/20 shadow-[inset_0_0_20px_var(--color-error)]' : ''}
                   ${isKingInCheck ? 'bg-error/40 shadow-[inset_0_0_30px_var(--color-error)] animate-pulse' : ''}
@@ -148,7 +177,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                 {piece && (
                   <div className={`w-full h-full flex items-center justify-center z-10 ${isSelected || isPreview ? 'scale-110' : ''} transition-transform`}>
-                    <PieceIcon type={piece.type} color={piece.color} />
+                    <PieceIcon type={piece.type} color={piece.color} theme={pieceTheme} />
                   </div>
                 )}
               </div>

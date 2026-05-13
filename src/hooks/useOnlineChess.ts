@@ -21,6 +21,7 @@ export interface OnlineMatchState {
   winner: string | null;
   winnerId: string | null;
   lastMoveAt: any;
+  increment: number;
 }
 
 export const useOnlineChess = (matchId: string | null, userId: string | null) => {
@@ -175,17 +176,22 @@ export const useOnlineChess = (matchId: string | null, userId: string | null) =>
         const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'online_matches', matchId);
         const isMate = gameCopy.isCheckmate();
         
+        const incrementValue = matchData.increment || 0;
         await updateDoc(matchRef, {
           fen: gameCopy.fen(),
           pgn: gameCopy.pgn(),
           turn: gameCopy.turn(),
-          whiteTime: whiteTime, 
-          blackTime: blackTime,
+          whiteTime: whiteTime + (playerColor === 'w' ? incrementValue : 0), 
+          blackTime: blackTime + (playerColor === 'b' ? incrementValue : 0),
           status: isMate ? 'completed' : 'ongoing',
           winner: isMate ? (playerColor === 'w' ? 'White' : 'Black') : null,
           winnerId: isMate ? userId : null,
           lastMoveAt: serverTimestamp()
         });
+
+        // Optimistically update local timers
+        if (playerColor === 'w') setWhiteTime(prev => prev + incrementValue);
+        else setBlackTime(prev => prev + incrementValue);
 
         setGame(gameCopy);
         setFen(gameCopy.fen());

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import type { Move, Square } from 'chess.js';
 
-export const useChessGame = (initialTimeSeconds: number = 600) => {
+export const useChessGame = (initialTimeSeconds: number = 600, incrementSeconds: number = 0) => {
   const [game, setGame] = useState(new Chess());
   const [fen, setFen] = useState(game.fen());
   const [moveHistory, setMoveHistory] = useState<Move[]>([]);
@@ -65,6 +65,13 @@ export const useChessGame = (initialTimeSeconds: number = 600) => {
         // Stop timer if checkmate or draw
         if (gameCopy.isGameOver()) {
           setIsTimerActive(false);
+        } else {
+          // Apply Fisher increment if game continues
+          if (move.color === 'w') {
+            setWhiteTime((prev) => prev + incrementSeconds);
+          } else {
+            setBlackTime((prev) => prev + incrementSeconds);
+          }
         }
         
         return true;

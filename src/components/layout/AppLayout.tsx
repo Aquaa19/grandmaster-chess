@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Bot, Users, History, Settings, UserCircle, User, Trophy } from 'lucide-react';
+import { Home, Bot, Users, History, Settings, UserCircle, User, Trophy, Puzzle } from 'lucide-react';
 import type { ScreenState } from '../../App';
 
 interface AppLayoutProps {
@@ -19,11 +19,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 }) => {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'puzzles', label: 'Puzzles', icon: Puzzle },
     { id: 'ai', label: 'AI Match', icon: Bot },
     { id: 'local', label: 'Local Play', icon: Users },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
     { id: 'history', label: 'History', icon: History },
     { id: 'profile', label: 'Profile', icon: User },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
 
   return (

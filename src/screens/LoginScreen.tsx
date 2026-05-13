@@ -9,7 +9,7 @@ interface LoginScreenProps {
   onAuth: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onAuth }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

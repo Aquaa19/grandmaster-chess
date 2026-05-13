@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Trophy, Medal, Target, Globe, Loader2, User,
+  Trophy, Globe, Loader2, User,
   TowerControl, Bot, Castle, Gamepad2, BrainCircuit, Gem,
-  ArrowUp, Activity, Award, TrendingUp
+  Award, TrendingUp
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { collectionGroup, query, orderBy, limit, getDocs } from 'firebase/firestore';

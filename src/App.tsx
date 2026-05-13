@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -16,7 +16,19 @@ import { ReplayScreen } from './screens/ReplayScreen';
 import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
 import { OnlineMatchScreen } from './screens/OnlineMatchScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
+import { PuzzlesScreen } from './screens/PuzzlesScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { AppLayout } from './components/layout/AppLayout';
+import type { BoardThemeKey, PieceThemeKey } from './components/chess/ChessBoard';
+
+// --- RESTORED GLOBAL DECLARATIONS ---
+declare global {
+  interface Window {
+    __initial_auth_token?: string;
+    __firebase_config?: string;
+    __app_id?: string;
+  }
+}
 
 export type ScreenState = 
   | 'login' 
@@ -29,15 +41,9 @@ export type ScreenState =
   | 'replay' 
   | 'online_lobby' 
   | 'online_match'
-  | 'leaderboard';
-
-declare global {
-  interface Window {
-    __initial_auth_token?: string;
-    __firebase_config?: string;
-    __app_id?: string;
-  }
-}
+  | 'leaderboard'
+  | 'puzzles'
+  | 'settings';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>('login');
@@ -46,12 +52,16 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
   const [playerName, setPlayerName] = useState('Guest Player');
 
+  const [boardTheme, setBoardTheme] = useState<BoardThemeKey>('default');
+  const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('standard');
+
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if ((window as any).__initial_auth_token) {
-          await signInWithCustomToken(auth, (window as any).__initial_auth_token);
+        if (window.__initial_auth_token) {
+          await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
+          // Fixed the type access here
           if (typeof window.__firebase_config !== 'undefined' && window.__firebase_config) {
             await signInAnonymously(auth);
           }
@@ -75,17 +85,20 @@ export default function App() {
         return;
       }
 
-      // Rule 1: Namespaced path for profile data
       const profileRef = doc(db, 'artifacts', appId, 'users', u.uid, 'profile', 'data');
       
-      // Use onSnapshot to keep sidebar name synced with dashboard edits
       unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setPlayerName(data.name || 'Guest Player');
           
+          if (data.settings) {
+            if (data.settings.boardTheme) setBoardTheme(data.settings.boardTheme);
+            if (data.settings.pieceTheme) setPieceTheme(data.settings.pieceTheme);
+          }
+          
           setInitializing((prevInit) => {
-            if (prevInit) setCurrentScreen('home'); // Only force route on initial load
+            if (prevInit) setCurrentScreen('home');
             return false;
           });
         } else {
@@ -106,9 +119,7 @@ export default function App() {
   }, []);
 
   const handleNavigate = (screen: ScreenState, matchId?: string) => {
-    if (matchId) {
-      setSelectedMatchId(matchId);
-    }
+    if (matchId) setSelectedMatchId(matchId);
     setCurrentScreen(screen);
   };
 
@@ -123,66 +134,53 @@ export default function App() {
     );
   }
 
-  // Screens that render OUTSIDE the main layout
-  if (currentScreen === 'login') {
-    return <LoginScreen onAuth={() => {}} />;
-  }
-  
-  if (currentScreen === 'create_profile') {
-    return <CreateProfileScreen user={user} onContinue={() => setCurrentScreen('home')} />;
-  }
+  if (currentScreen === 'login') return <LoginScreen onAuth={() => {}} />;
+  if (currentScreen === 'create_profile') return <CreateProfileScreen user={user} onContinue={() => setCurrentScreen('home')} />;
 
-  // Screens that render INSIDE the main layout with sidebar
   return (
     <AppLayout 
       currentScreen={currentScreen} 
       onNavigate={handleNavigate as any}
       playerName={playerName}
     >
-      {currentScreen === 'profile' && (
-        <ProfileScreen user={user} />
+      {currentScreen === 'profile' && <ProfileScreen user={user} />}
+      {currentScreen === 'leaderboard' && <LeaderboardScreen user={user} />}
+      
+      {currentScreen === 'puzzles' && (
+        <PuzzlesScreen user={user} boardTheme={boardTheme} pieceTheme={pieceTheme} />
       )}
 
-      {currentScreen === 'leaderboard' && (
-        <LeaderboardScreen user={user} />
-      )}
-
-      {currentScreen === 'home' && (
-        <HomeScreen user={user} onNavigate={handleNavigate as any} />
-      )}
+      {currentScreen === 'settings' && <SettingsScreen user={user} />}
+      {currentScreen === 'home' && <HomeScreen user={user} onNavigate={handleNavigate as any} />}
       
       {currentScreen === 'local' && (
-        <LocalMultiplayerScreen user={user} />
+        <LocalMultiplayerScreen user={user} boardTheme={boardTheme} pieceTheme={pieceTheme} />
       )}
       
       {currentScreen === 'ai' && (
-        <SinglePlayerScreen user={user} />
+        <SinglePlayerScreen user={user} boardTheme={boardTheme} pieceTheme={pieceTheme} />
       )}
       
-      {currentScreen === 'history' && (
-        <HistoryScreen user={user} onNavigate={handleNavigate} />
-      )}
+      {currentScreen === 'history' && <HistoryScreen user={user} onNavigate={handleNavigate} />}
       
       {currentScreen === 'replay' && (
         <ReplayScreen 
           user={user} 
           matchId={selectedMatchId as string} 
-          onNavigate={handleNavigate} 
+          onNavigate={handleNavigate}
+          boardTheme={boardTheme}
+          pieceTheme={pieceTheme}
         />
       )}
 
-      {currentScreen === 'online_lobby' && (
-        <OnlineLobbyScreen 
-          user={user} 
-          onNavigate={handleNavigate as any} 
-        />
-      )}
-
+      {currentScreen === 'online_lobby' && <OnlineLobbyScreen user={user} onNavigate={handleNavigate as any} />}
       {currentScreen === 'online_match' && (
         <OnlineMatchScreen 
           user={user} 
           matchId={selectedMatchId as string} 
-          onNavigate={handleNavigate as any} 
+          onNavigate={handleNavigate as any}
+          boardTheme={boardTheme}
+          pieceTheme={pieceTheme}
         />
       )}
     </AppLayout>

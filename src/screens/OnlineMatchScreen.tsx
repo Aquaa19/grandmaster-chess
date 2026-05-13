@@ -4,15 +4,18 @@ import {
   Pause, Play, AlertCircle, LogOut, MessageSquare, ShieldCheck
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import type { Square } from 'chess.js';
+
 import { useOnlineChess } from '../hooks/useOnlineChess';
 import { ChessBoard } from '../components/chess/ChessBoard';
+import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
 import type { ScreenState } from '../App';
 
 interface OnlineMatchScreenProps {
   user: FirebaseUser | null;
   matchId: string;
   onNavigate: (s: ScreenState) => void;
+  boardTheme: BoardThemeKey;
+  pieceTheme: PieceThemeKey;
 }
 
 const formatTime = (seconds: number) => {
@@ -24,7 +27,9 @@ const formatTime = (seconds: number) => {
 export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({ 
   user, 
   matchId, 
-  onNavigate 
+  onNavigate,
+  boardTheme,
+  pieceTheme
 }) => {
   const {
     fen,
@@ -46,7 +51,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
     isCheckmate
   } = useOnlineChess(matchId, user?.uid || null);
 
-  const [previewMoveSquare, setPreviewMoveSquare] = useState<Square | null>(null);
+
   const [showBlockWarning, setShowBlockWarning] = useState(false);
 
   const groupedMoves = [];
@@ -73,10 +78,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
     return () => document.removeEventListener('click', handleNavClick, true);
   }, [matchData?.status, isGameOver]);
 
-  const handlePreviewMove = (targetSquare: string) => {
-    setPreviewMoveSquare(targetSquare as Square);
-    setTimeout(() => setPreviewMoveSquare(null), 1500);
-  };
+
 
   const handleResign = async () => {
     if (window.confirm("Concede the match? You will incur a 50 XP penalty.")) {
@@ -136,10 +138,11 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
             fen={fen} 
             onMove={makeOnlineMove} 
             flipped={isFlipped}
-            previewMoveSquare={previewMoveSquare}
+            previewMoveSquare={null} 
+            boardTheme={boardTheme}
+            pieceTheme={pieceTheme}
           />
 
-          {/* Status Overlays */}
           {/* Status Overlays */}
           {matchData.status === 'pending' && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
@@ -155,6 +158,12 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
                            <div className="font-title-md text-primary truncate whitespace-nowrap">{opponentProfile.name || 'Anonymous Player'}</div>
                            <div className="text-[10px] text-on-surface-variant font-mono tracking-widest whitespace-nowrap">UID: {opponentId?.slice(0,8)}...</div>
                          </div>
+                      </div>
+                      <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2 mt-2">
+                         <span className="text-on-surface-variant font-label-caps tracking-widest text-[10px] whitespace-nowrap">Time Control</span>
+                         <span className="font-mono-stats text-tertiary whitespace-nowrap">
+                           {matchData.whiteTime / 60}+{matchData.increment}s
+                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2 mt-2">
                          <span className="text-on-surface-variant font-label-caps tracking-widest text-[10px] whitespace-nowrap">Experience</span>

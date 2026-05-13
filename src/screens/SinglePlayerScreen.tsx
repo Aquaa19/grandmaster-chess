@@ -9,9 +9,12 @@ import type { Square } from 'chess.js';
 import { db, appId } from '../config/firebase';
 import { useChessGame } from '../hooks/useChessGame';
 import { ChessBoard } from '../components/chess/ChessBoard';
+import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
 
 interface SinglePlayerScreenProps {
   user: FirebaseUser | null;
+  boardTheme: BoardThemeKey;
+  pieceTheme: PieceThemeKey;
 }
 
 const AI_LEVEL_NAMES = ['Novice', 'Amateur', 'Intermediate', 'Expert', 'Grandmaster'];
@@ -32,7 +35,7 @@ const getStockfishConfig = (level: number) => {
   };
 };
 
-export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) => {
+export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, boardTheme, pieceTheme }) => {
   const { 
     game, 
     fen, 
@@ -345,6 +348,8 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user }) 
             flipped={false} 
             inCheckSquare={inCheckSquare} 
             previewMoveSquare={previewMoveSquare}
+            boardTheme={boardTheme}
+            pieceTheme={pieceTheme}
           />
 
           {matchPhase === 'setup' && (

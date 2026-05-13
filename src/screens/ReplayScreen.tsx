@@ -1,9 +1,8 @@
-// /home/aquaax19/Workspace/Projects/Chess/grandmaster-chess/src/screens/ReplayScreen.tsx
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   SkipBack, ChevronLeft, ChevronRight, SkipForward, 
-  ArrowLeft, Loader2, Bot, Users, Trophy, Zap, AlertTriangle, XCircle
+  ArrowLeft, Loader2, Bot, Users, AlertTriangle, XCircle,
+  Download, Upload, FileText
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -11,6 +10,7 @@ import { Chess } from 'chess.js';
 import type { Square } from 'chess.js';
 import { db, appId } from '../config/firebase';
 import { ChessBoard } from '../components/chess/ChessBoard';
+import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
 import { EvaluationBar } from '../components/chess/EvaluationBar';
 import type { ScreenState } from '../App';
 
@@ -18,11 +18,12 @@ interface ReplayScreenProps {
   user: FirebaseUser | null;
   matchId: string;
   onNavigate: (s: ScreenState) => void;
+  boardTheme: BoardThemeKey;
+  pieceTheme: PieceThemeKey;
 }
 
-export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNavigate }) => {
+export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNavigate, boardTheme, pieceTheme }) => {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [matchData, setMatchData] = useState<any>(null);
   
   // Replay Engine State
@@ -36,6 +37,11 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
   const [mate, setMate] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const workerRef = useRef<Worker | null>(null);
+
+  // PGN Import State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   // 1. Fetch match data
   useEffect(() => {
@@ -52,10 +58,10 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
           setMoves(data.moves || []);
           setCurrentMoveIndex(data.moves?.length || 0);
         } else {
-          setError("Match not found.");
+          console.error("Match not found.");
         }
       } catch (err) {
-        setError("Failed to load match data.");
+        console.error("Failed to load match data.");
       } finally {
         setLoading(false);
       }
@@ -134,6 +140,64 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
   const handleNext = () => setCurrentMoveIndex(prev => Math.min(moves.length, prev + 1));
   const handleEnd = () => setCurrentMoveIndex(moves.length);
 
+  const handleExportPGN = () => {
+    const tempGame = new Chess();
+    moves.forEach(m => {
+      try { tempGame.move(m); } catch (e) { console.error("Export skip move:", m); }
+    });
+    
+    const headers = [
+      `[Event "${matchData?.matchName || 'Match Analysis'}"]`,
+      `[Site "Grandmaster Chess App"]`,
+      `[Date "${new Date().toISOString().split('T')[0]}"]`,
+      `[White "${matchData?.type === 'ai_match' ? (matchData.winner === 'White' ? 'Winner' : 'Player') : 'Player 1'}"]`,
+      `[Black "${matchData?.type === 'ai_match' ? 'Stockfish AI' : 'Player 2'}"]`,
+      `[Result "${matchData?.winner ? (matchData.winner === 'White' ? '1-0' : '0-1') : '1/2-1/2'}"]`
+    ].join('\n');
+
+    const pgn = headers + '\n\n' + tempGame.pgn();
+    const blob = new Blob([pgn], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `match-${matchId.split('-')[0] || 'chess'}.pgn`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportPGN = () => {
+    if (!importText.trim()) return;
+    try {
+      const tempGame = new Chess();
+      try {
+        tempGame.loadPgn(importText);
+        const newMoves = tempGame.history();
+        
+        if (newMoves.length > 0) {
+          setMoves(newMoves);
+          setCurrentMoveIndex(newMoves.length);
+          setShowImportModal(false);
+          setImportText('');
+          setImportError(null);
+          setMatchData((prev: any) => ({ 
+            ...prev, 
+            matchName: "Imported Analysis", 
+            status: "completed",
+            type: "imported"
+          }));
+        } else {
+          setImportError("PGN parsed but no moves were found.");
+        }
+      } catch (e) {
+        setImportError("Invalid PGN format. Ensure standard notation is used.");
+      }
+    } catch (e) {
+      setImportError("Critical error parsing PGN data.");
+    }
+  };
+
   const groupedMoves = [];
   for (let i = 0; i < moves.length; i += 2) {
     groupedMoves.push({
@@ -184,6 +248,8 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
               onMove={() => false} 
               flipped={false} 
               inCheckSquare={inCheckSquare}
+              boardTheme={boardTheme}
+              pieceTheme={pieceTheme}
             />
           </div>
         </div>
@@ -234,6 +300,22 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
            </div>
         </div>
 
+        {/* PGN Actions */}
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+             onClick={handleExportPGN}
+             className="flex items-center justify-center gap-2 bg-surface-container-high hover:bg-surface-variant text-primary py-3 rounded-xl border border-white/5 transition-all active:scale-95 text-xs font-title-md"
+          >
+            <Download className="w-4 h-4 text-tertiary" /> Export PGN
+          </button>
+          <button 
+             onClick={() => setShowImportModal(true)}
+             className="flex items-center justify-center gap-2 bg-surface-container-high hover:bg-surface-variant text-primary py-3 rounded-xl border border-white/5 transition-all active:scale-95 text-xs font-title-md"
+          >
+            <Upload className="w-4 h-4 text-tertiary" /> Import PGN
+          </button>
+        </div>
+
         {/* Notation Log with Quality Tags */}
         <div className="flex-1 glass-panel rounded-xl flex flex-col overflow-hidden min-h-[400px]">
           <div className="p-md border-b border-white/10 bg-surface-container-high font-title-md text-primary">
@@ -273,6 +355,54 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
           </div>
         </div>
       </aside>
+
+      {/* PGN Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/90 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="glass-panel w-full max-w-lg rounded-2xl p-lg flex flex-col gap-md border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-tertiary" />
+                  <h3 className="text-xl font-display-lg text-primary">Import Match Data</h3>
+                </div>
+                <button onClick={() => setShowImportModal(false)} className="text-on-surface-variant hover:text-white transition-colors">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <p className="text-sm text-on-surface-variant">Paste your standard PGN string below to analyze the game with Stockfish.</p>
+              
+              <textarea 
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder="1. e4 e5 2. Nf3 Nc6..."
+                className="w-full h-48 bg-surface-container text-on-surface font-mono text-sm p-md rounded-lg border border-white/10 focus:outline-none focus:border-tertiary transition-colors resize-none"
+              />
+
+              {importError && (
+                <div className="flex items-center gap-2 text-error text-xs font-title-md bg-error/10 p-sm rounded border border-error/20">
+                  <AlertTriangle className="w-4 h-4" /> {importError}
+                </div>
+              )}
+
+              <div className="flex gap-md pt-md">
+                <button 
+                  onClick={() => setShowImportModal(false)}
+                  className="flex-1 py-3 font-title-md text-on-surface-variant hover:bg-surface-variant rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleImportPGN}
+                  disabled={!importText.trim()}
+                  className="flex-[2] py-3 bg-tertiary hover:bg-yellow-400 text-on-tertiary font-bold rounded-lg shadow-lg shadow-tertiary/20 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  Analyze PGN
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Users, FlipVertical, Undo2, RotateCcw, Crown, Search, Pause, Play, Loader2, AlertCircle, Settings2 } from 'lucide-react';
+import { Users, FlipVertical, Undo2, Crown, Search, Pause, Play, Loader2, AlertCircle, Settings2 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, serverTimestamp } from 'firebase/firestore';
 import type { Square } from 'chess.js';
 import { db, appId } from '../config/firebase';
 import { useChessGame } from '../hooks/useChessGame';
 import { ChessBoard } from '../components/chess/ChessBoard';
+import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
 
 interface LocalMultiplayerScreenProps {
   user: FirebaseUser | null;
+  boardTheme: BoardThemeKey;
+  pieceTheme: PieceThemeKey;
 }
 
 const formatTime = (seconds: number) => {
@@ -17,7 +20,7 @@ const formatTime = (seconds: number) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ user }) => {
+export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ user, boardTheme, pieceTheme }) => {
   const { 
     fen, 
     moveHistory, 
@@ -224,6 +227,8 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
             flipped={isFlipped} 
             inCheckSquare={inCheckSquare}
             previewMoveSquare={previewMoveSquare}
+            boardTheme={boardTheme}
+            pieceTheme={pieceTheme}
           />
 
           {/* Setup Match Modal */}
