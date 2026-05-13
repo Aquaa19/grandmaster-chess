@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "grandmaster-chess-75b51"
+  },
+  "targets": {
+    "grandmaster-chess-75b51": {
+      "hosting": {
+        "main": [
+          "grandmaster-arena-aquaa",
+          "grandmaster-arena-aquaa.web.app"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
