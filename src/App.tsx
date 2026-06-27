@@ -53,7 +53,7 @@ export default function App() {
   const [playerName, setPlayerName] = useState('Guest Player');
 
   const [boardTheme, setBoardTheme] = useState<BoardThemeKey>('default');
-  const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('standard');
+  const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('cburnett');
 
   useEffect(() => {
     const initAuth = async () => {

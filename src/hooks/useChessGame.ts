@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import type { Move, Square } from 'chess.js';
+import { playMoveSound, playCaptureSound, playCheckSound } from '../utils/audio';
 
 export const useChessGame = (initialTimeSeconds: number = 600, incrementSeconds: number = 0) => {
   const [game, setGame] = useState(new Chess());
@@ -57,6 +58,15 @@ export const useChessGame = (initialTimeSeconds: number = 600, incrementSeconds:
         setFen(gameCopy.fen());
         setMoveHistory(gameCopy.history({ verbose: true }) as Move[]);
         
+        // Play appropriate sound effect
+        if (gameCopy.inCheck()) {
+          playCheckSound();
+        } else if (move.captured || move.flags.includes('c') || move.flags.includes('e')) {
+          playCaptureSound();
+        } else {
+          playMoveSound();
+        }
+
         // Start the timer on the very first move of the match
         if (!isTimerActive && !gameCopy.isGameOver()) {
           setIsTimerActive(true);

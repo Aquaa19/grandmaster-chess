@@ -16,7 +16,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ user }) => {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [boardTheme, setBoardTheme] = useState<BoardThemeKey>('default');
-  const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('standard');
+  const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('cburnett');
 
   // Load existing preferences on mount
   useEffect(() => {
@@ -155,9 +155,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ user }) => {
                 >
                   <div className="w-16 h-16 flex items-center justify-center bg-surface-container-high rounded-md border border-white/10 shadow-inner">
                     {/* SVG preview of a Knight */}
-                    <svg viewBox="0 0 24 24" className={`w-10 h-10 ${theme.w}`}>
-                       <path d="M19,19H5V17H19V19M19,15H5V13C5,13 5,9 8,6C9,5 10,5 11,5V3H13V5C15,5 17,6 18,8C19,10 19,12 19,12V15Z" />
-                    </svg>
+                    <img src={`/pieces/${key}/wn.svg`} alt="White Knight Preview" className="w-12 h-12 select-none object-contain" />
                   </div>
                   <span className={`font-title-md text-sm ${pieceTheme === key ? 'text-tertiary' : 'text-on-surface-variant'}`}>
                     {theme.name}

@@ -93,12 +93,12 @@
   
   /* Chess Board Square Colors & Transitions */
   .board-square-light {
-    background-color: var(--color-surface-container-high);
+    background-color: #eeeed2;
     @apply transition-colors duration-500 ease-in-out;
   }
   
   .board-square-dark {
-    background-color: var(--color-primary-container);
+    background-color: #769656;
     @apply transition-colors duration-500 ease-in-out;
   }
 

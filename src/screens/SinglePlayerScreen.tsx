@@ -10,6 +10,7 @@ import { db, appId } from '../config/firebase';
 import { useChessGame } from '../hooks/useChessGame';
 import { ChessBoard } from '../components/chess/ChessBoard';
 import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
+import { playVictorySound, playDefeatSound } from '../utils/audio';
 
 interface SinglePlayerScreenProps {
   user: FirebaseUser | null;
@@ -204,7 +205,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
           matchName: customMatchName || 'AI Campaign', 
           ai_level: aiLevel,
           status: isCheckmate ? 'completed' : 'ongoing',
-          winner: isCheckmate ? (playerWon ? 'Player' : 'Stockfish AI') : null,
+          winner: isCheckmate ? (playerWon ? 'Player' : 'Caissa Engine') : null,
           moves: moveHistory.map((m: any) => m.san),
           whiteTime: whiteTime,
           blackTime: blackTime,
@@ -227,6 +228,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
           const playerWon = turn === 'b'; 
 
           if (playerWon) {
+            playVictorySound();
             const earned = aiLevel * 150; 
             setXpEarned(earned);
 
@@ -243,6 +245,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
               ...(newMedals.length > 0 && { medals: arrayUnion(...newMedals) })
             });
           } else {
+            playDefeatSound();
             setXpEarned(25); 
             const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
             await updateDoc(profileRef, { 
@@ -323,7 +326,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
             </div>
             <div>
               <div className="flex items-center gap-sm">
-                <h2 className="font-title-md text-title-md text-primary">Stockfish AI</h2>
+                <h2 className="font-title-md text-title-md text-primary">Caissa Engine</h2>
                 <span className="bg-surface-variant text-on-surface-variant font-label-caps text-label-caps px-2 py-1 rounded tracking-widest text-[10px]">
                   Lv. {aiLevel}
                 </span>
@@ -375,12 +378,23 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
                          <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Difficulty Tier</label>
                          <span className="text-tertiary font-mono-stats text-sm">Tier {aiLevel}</span>
                        </div>
-                       <input
-                         type="range" min="1" max="5" value={aiLevel}
-                         onChange={(e) => setAiLevel(Number(e.target.value))}
-                         className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary"
-                       />
-                       <div className="text-center mt-2 text-primary text-sm font-title-md">{AI_LEVEL_NAMES[aiLevel - 1]}</div>
+                       <div className="grid grid-cols-5 gap-2 mt-2">
+                         {[1, 2, 3, 4, 5].map((level) => (
+                           <button
+                             key={level}
+                             type="button"
+                             onClick={() => setAiLevel(level)}
+                             className={`py-3 rounded-lg border text-sm font-mono-stats font-bold transition-all active:scale-95 ${
+                               aiLevel === level
+                                 ? 'bg-tertiary text-on-tertiary border-tertiary shadow-md shadow-tertiary/20'
+                                 : 'bg-surface-container text-on-surface-variant border-white/10 hover:bg-surface-variant hover:text-primary'
+                             }`}
+                           >
+                             {level}
+                           </button>
+                         ))}
+                       </div>
+                       <div className="text-center mt-3 text-primary text-sm font-title-md font-bold bg-surface-variant/40 py-2 rounded-lg border border-white/5">{AI_LEVEL_NAMES[aiLevel - 1]}</div>
                     </div>
                     <div className="bg-surface-variant/30 border border-white/5 rounded-lg p-4 flex justify-between items-center">
                       <span className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Win Reward</span>
@@ -498,16 +512,24 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
               Tier {aiLevel}
             </span>
           </div>
-          <input 
-            type="range" 
-            min="1" 
-            max="5" 
-            value={aiLevel}
-            disabled={moveHistory.length > 0} 
-            onChange={(e) => setAiLevel(Number(e.target.value))}
-            className="w-full h-2 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-tertiary focus:outline-none focus:ring-2 focus:ring-tertiary/50 relative z-10 disabled:opacity-50 disabled:cursor-not-allowed" 
-          />
-          <div className="text-center mt-md font-title-md text-tertiary relative z-10 bg-tertiary/10 py-1 rounded border border-tertiary/20">
+          <div className="grid grid-cols-5 gap-2 mt-2 relative z-10">
+            {[1, 2, 3, 4, 5].map((level) => (
+              <button
+                key={level}
+                type="button"
+                disabled={moveHistory.length > 0}
+                onClick={() => setAiLevel(level)}
+                className={`py-2 rounded-lg border text-xs font-mono-stats font-bold transition-all ${
+                  aiLevel === level
+                    ? 'bg-tertiary text-on-tertiary border-tertiary shadow-md'
+                    : 'bg-surface-container text-on-surface-variant border-white/5 hover:bg-surface-variant'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+          <div className="text-center mt-md font-title-md text-tertiary relative z-10 bg-tertiary/10 py-1.5 rounded border border-tertiary/20">
             {AI_LEVEL_NAMES[aiLevel - 1]}
           </div>
         </div>
