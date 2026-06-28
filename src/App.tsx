@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -55,6 +55,11 @@ export default function App() {
   const [boardTheme, setBoardTheme] = useState<BoardThemeKey>('default');
   const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('cburnett');
 
+  const currentScreenRef = useRef(currentScreen);
+  useEffect(() => {
+    currentScreenRef.current = currentScreen;
+  }, [currentScreen]);
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -98,7 +103,9 @@ export default function App() {
           }
           
           setInitializing((prevInit) => {
-            if (prevInit) setCurrentScreen('home');
+            if (prevInit || currentScreenRef.current === 'login') {
+              setCurrentScreen('home');
+            }
             return false;
           });
         } else {
