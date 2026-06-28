@@ -57,8 +57,22 @@ export const WelcomeTour: React.FC<WelcomeTourProps> = ({ onComplete }) => {
       return;
     }
 
+    const el = document.getElementById(step.targetId);
+    let originalPosition = '';
+    let originalZIndex = '';
+    let originalPointerEvents = '';
+
+    if (el) {
+      originalPosition = el.style.position;
+      originalZIndex = el.style.zIndex;
+      originalPointerEvents = el.style.pointerEvents;
+
+      el.style.position = 'relative';
+      el.style.zIndex = '1001';
+      el.style.pointerEvents = 'none'; // Prevent navigation clicks during tour
+    }
+
     const updateCoords = () => {
-      const el = document.getElementById(step.targetId);
       if (el) {
         const rect = el.getBoundingClientRect();
         setCoords({
@@ -77,6 +91,11 @@ export const WelcomeTour: React.FC<WelcomeTourProps> = ({ onComplete }) => {
     return () => {
       clearTimeout(timer);
       window.removeEventListener('resize', updateCoords);
+      if (el) {
+        el.style.position = originalPosition;
+        el.style.zIndex = originalZIndex;
+        el.style.pointerEvents = originalPointerEvents;
+      }
     };
   }, [currentStep, step.targetId]);
 
