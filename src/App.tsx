@@ -20,6 +20,7 @@ import { PuzzlesScreen } from './screens/PuzzlesScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AppLayout } from './components/layout/AppLayout';
 import type { BoardThemeKey, PieceThemeKey } from './components/chess/ChessBoard';
+import { WelcomeTour } from './components/WelcomeTour';
 
 // --- RESTORED GLOBAL DECLARATIONS ---
 declare global {
@@ -51,6 +52,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [playerName, setPlayerName] = useState('Guest Player');
+  const [showTour, setShowTour] = useState(false);
 
   const [boardTheme, setBoardTheme] = useState<BoardThemeKey>('default');
   const [pieceTheme, setPieceTheme] = useState<PieceThemeKey>('cburnett');
@@ -86,6 +88,7 @@ export default function App() {
       if (!u) {
         setInitializing(false);
         setCurrentScreen('login');
+        setShowTour(false);
         if (unsubscribeProfile) unsubscribeProfile();
         return;
       }
@@ -100,6 +103,11 @@ export default function App() {
           if (data.settings) {
             if (data.settings.boardTheme) setBoardTheme(data.settings.boardTheme);
             if (data.settings.pieceTheme) setPieceTheme(data.settings.pieceTheme);
+          }
+
+          // Trigger welcome tour onboarding if first time
+          if (!localStorage.getItem(`tour_completed_${u.uid}`)) {
+            setShowTour(true);
           }
           
           setInitializing((prevInit) => {
@@ -141,15 +149,23 @@ export default function App() {
     );
   }
 
+  const handleTourComplete = () => {
+    if (user) {
+      localStorage.setItem(`tour_completed_${user.uid}`, 'true');
+    }
+    setShowTour(false);
+  };
+
   if (currentScreen === 'login') return <LoginScreen onAuth={() => {}} />;
   if (currentScreen === 'create_profile') return <CreateProfileScreen user={user} onContinue={() => setCurrentScreen('home')} />;
 
   return (
-    <AppLayout 
-      currentScreen={currentScreen} 
-      onNavigate={handleNavigate as any}
-      playerName={playerName}
-    >
+    <>
+      <AppLayout 
+        currentScreen={currentScreen} 
+        onNavigate={handleNavigate as any}
+        playerName={playerName}
+      >
       {currentScreen === 'profile' && <ProfileScreen user={user} />}
       {currentScreen === 'leaderboard' && <LeaderboardScreen user={user} />}
       
@@ -191,5 +207,8 @@ export default function App() {
         />
       )}
     </AppLayout>
-  );
+
+    {showTour && <WelcomeTour onComplete={handleTourComplete} />}
+  </>
+);
 }

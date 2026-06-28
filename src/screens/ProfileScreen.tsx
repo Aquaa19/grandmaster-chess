@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   User, TowerControl, Bot, Castle, Gamepad2, 
   BrainCircuit, Gem, Loader2, Trophy, Medal, Target, 
-  Globe, Shield, Crown, Activity
+  Globe, Shield, Crown, Activity, LogOut
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db, appId } from '../config/firebase';
+import { db, appId, auth } from '../config/firebase';
 
 interface ProfileScreenProps {
   user: FirebaseUser | null;
@@ -112,11 +112,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user }) => {
             <div>
               <h1 className="font-display-lg text-4xl text-primary mb-1">{profileData.name}</h1>
               <div className="flex items-center justify-center md:justify-start gap-4 text-xs font-mono text-on-surface-variant">
-                <span className="bg-surface-variant px-2 py-1 rounded border border-white/5">UID: {user?.uid.split('-')[0]}</span>
                 <span className="flex items-center gap-1 text-tertiary"><Trophy className="w-4 h-4" /> Grandmaster Candidate</span>
               </div>
             </div>
          </div>
+         <button onClick={() => auth.signOut()} className="bg-error/15 hover:bg-error/25 text-error border border-error/30 font-title-md text-sm py-2 px-5 rounded-lg flex items-center gap-2 active:scale-95 transition-all z-10">
+           <LogOut className="w-4 h-4" /> Sign Out
+         </button>
       </div>
 
       {/* Stats Toggle & Overview */}

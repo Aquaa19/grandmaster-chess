@@ -52,6 +52,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           {navItems.map(({ id, label, icon: Icon }) => (
             <button 
               key={id}
+              id={`nav-item-${id}`}
               onClick={() => onNavigate(id as ScreenState)}
               className={`flex items-center gap-md px-md py-sm rounded-lg transition-all duration-200 ${
                 currentScreen === id 
@@ -90,6 +91,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {navItems.map(({ id, label, icon: Icon }) => (
           <button 
             key={id}
+            id={`nav-item-${id}`}
             onClick={() => onNavigate(id as ScreenState)}
             className={`flex flex-col items-center justify-center transition-transform active:scale-90 ${
               currentScreen === id ? 'text-tertiary' : 'text-on-surface-variant hover:text-primary'
