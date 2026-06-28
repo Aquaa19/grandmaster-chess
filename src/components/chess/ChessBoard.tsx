@@ -41,6 +41,7 @@ interface ChessBoardProps {
   previewMoveSquare?: Square | null;
   boardTheme?: BoardThemeKey;
   pieceTheme?: PieceThemeKey;
+  lastMove?: { from: string; to: string } | null;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -53,7 +54,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   inCheckSquare = null,
   previewMoveSquare = null,
   boardTheme = 'default',
-  pieceTheme = 'cburnett'
+  pieceTheme = 'cburnett',
+  lastMove = null
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   
@@ -115,6 +117,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isKingInCheck = inCheckSquare === squareName;
             const isPreview = previewMoveSquare === squareName;
 
+            const isLastMoveSource = lastMove && lastMove.from === squareName;
+            const isLastMoveTarget = lastMove && lastMove.to === squareName;
+
             const showRank = colIndex === (flipped ? 7 : 0);
             const showFile = rowIndex === (flipped ? 0 : 7);
 
@@ -128,6 +133,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   flex items-center justify-center relative cursor-pointer
                   ${squareColorClass}
                   ${isSelected || isPreview ? 'bg-tertiary/30' : ''}
+                  ${isLastMoveSource || isLastMoveTarget ? 'bg-tertiary/20' : ''}
                   ${isCaptureTarget ? 'bg-error/20 shadow-[inset_0_0_20px_var(--color-error)]' : ''}
                   ${isKingInCheck ? 'bg-error/40 shadow-[inset_0_0_30px_var(--color-error)] animate-pulse' : ''}
                 `}

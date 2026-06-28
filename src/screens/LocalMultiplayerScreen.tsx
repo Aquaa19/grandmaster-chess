@@ -229,6 +229,7 @@ export const LocalMultiplayerScreen: React.FC<LocalMultiplayerScreenProps> = ({ 
             previewMoveSquare={previewMoveSquare}
             boardTheme={boardTheme}
             pieceTheme={pieceTheme}
+            lastMove={moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null}
           />
 
           {/* Setup Match Modal */}

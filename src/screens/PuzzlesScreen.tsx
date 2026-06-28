@@ -370,6 +370,7 @@ export const PuzzlesScreen: React.FC<PuzzlesScreenProps> = ({ user, boardTheme, 
               flipped={initialTurn === 'b'} 
               boardTheme={boardTheme}
               pieceTheme={pieceTheme}
+              lastMove={game.history({ verbose: true }).length > 0 ? (game.history({ verbose: true }).slice(-1)[0] as any) : null}
             />
 
             {/* Setup Overlay */}

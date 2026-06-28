@@ -31,6 +31,7 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
   const [fen, setFen] = useState(new Chess().fen());
   const [inCheckSquare, setInCheckSquare] = useState<Square | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
 
   // Analysis State
   const [evaluation, setEvaluation] = useState(0);
@@ -110,6 +111,14 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
 
     const currentFen = tempGame.fen();
     setFen(currentFen);
+    
+    // Set last move
+    const history = tempGame.history({ verbose: true });
+    if (history.length > 0) {
+      setLastMove(history[history.length - 1] as any);
+    } else {
+      setLastMove(null);
+    }
     
     // Check highlighting
     let checkSquare: Square | null = null;
@@ -250,6 +259,7 @@ export const ReplayScreen: React.FC<ReplayScreenProps> = ({ user, matchId, onNav
               inCheckSquare={inCheckSquare}
               boardTheme={boardTheme}
               pieceTheme={pieceTheme}
+              lastMove={lastMove}
             />
           </div>
         </div>

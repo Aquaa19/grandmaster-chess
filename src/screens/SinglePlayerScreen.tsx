@@ -11,6 +11,7 @@ import { useChessGame } from '../hooks/useChessGame';
 import { ChessBoard } from '../components/chess/ChessBoard';
 import type { BoardThemeKey, PieceThemeKey } from '../components/chess/ChessBoard';
 import { playVictorySound, playDefeatSound } from '../utils/audio';
+import { EvaluationBar } from '../components/chess/EvaluationBar';
 
 interface SinglePlayerScreenProps {
   user: FirebaseUser | null;
@@ -67,6 +68,8 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
 
   const [matchPhase, setMatchPhase] = useState<'loading' | 'setup' | 'playing'>('loading');
   const [showBlockWarning, setShowBlockWarning] = useState(false);
+  const [evaluation, setEvaluation] = useState<number>(0);
+  const [mate, setMate] = useState<number | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
 
@@ -88,6 +91,30 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
     workerRef.current.onmessage = (e: MessageEvent) => {
       const line = typeof e.data === 'string' ? e.data : '';
       
+      if (line.includes('score cp')) {
+        const parts = line.split(' ');
+        const cpIndex = parts.indexOf('cp');
+        if (cpIndex !== -1) {
+          let cp = parseInt(parts[cpIndex + 1]);
+          // Standardize score relative to White's view
+          if (game?.turn() === 'b') {
+            cp = -cp;
+          }
+          setEvaluation(cp);
+          setMate(null);
+        }
+      } else if (line.includes('score mate')) {
+        const parts = line.split(' ');
+        const mateIndex = parts.indexOf('mate');
+        if (mateIndex !== -1) {
+          let m = parseInt(parts[mateIndex + 1]);
+          if (game?.turn() === 'b') {
+            m = -m;
+          }
+          setMate(m);
+        }
+      }
+      
       if (line && line.startsWith('bestmove')) {
         const move = line.split(' ')[1]; 
         if (move && move !== '(none)') {
@@ -106,7 +133,7 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
     return () => {
       workerRef.current?.terminate();
     };
-  }, [makeMove]);
+  }, [makeMove, game]);
 
   // --- 1. SMART RESUME EFFECT ---
   useEffect(() => {
@@ -189,6 +216,14 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
       return () => clearTimeout(timer);
     }
   }, [turn, isGameOver, game, aiLevel, isPaused, matchPhase]);
+
+  // --- 3.5 TRIGGER EVALUATION ON PLAYER TURN ---
+  useEffect(() => {
+    if (turn === 'w' && !isGameOver && !isPaused && matchPhase === 'playing' && workerRef.current) {
+      workerRef.current.postMessage(`position fen ${fen}`);
+      workerRef.current.postMessage('go depth 10');
+    }
+  }, [turn, fen, isGameOver, isPaused, matchPhase]);
 
   // --- 4. LIVE SYNC EFFECT ---
   useEffect(() => {
@@ -344,123 +379,130 @@ export const SinglePlayerScreen: React.FC<SinglePlayerScreenProps> = ({ user, bo
           </div>
         </div>
 
-        <div className="relative w-full max-w-[600px] mx-auto">
-          <ChessBoard 
-            fen={fen} 
-            onMove={makeMove} 
-            flipped={false} 
-            inCheckSquare={inCheckSquare} 
-            previewMoveSquare={previewMoveSquare}
-            boardTheme={boardTheme}
-            pieceTheme={pieceTheme}
-          />
-
-          {matchPhase === 'setup' && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
-               <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
-                  <Settings2 className="w-12 h-12 text-tertiary mb-4 shrink-0" />
-                  <h2 className="font-display-lg text-3xl text-primary mb-2 whitespace-nowrap shrink-0">Campaign Setup</h2>
-                  <p className="text-sm text-on-surface-variant mb-6 shrink-0 w-full">Configure your AI opponent and match details.</p>
-                  
-                  <div className="w-full space-y-5 mb-6 text-left shrink-0">
-                    <div>
-                      <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps block mb-2">Match Name (Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., King's Indian Practice"
-                        value={customMatchName}
-                        onChange={(e) => setCustomMatchName(e.target.value)}
-                        className="w-full bg-surface-container text-on-surface font-body-sm border border-white/20 rounded-lg py-3 px-4 focus:outline-none focus:border-tertiary transition-colors"
-                      />
-                    </div>
-                    <div>
-                       <div className="flex justify-between items-center mb-2">
-                         <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Difficulty Tier</label>
-                         <span className="text-tertiary font-mono-stats text-sm">Tier {aiLevel}</span>
-                       </div>
-                       <div className="grid grid-cols-5 gap-2 mt-2">
-                         {[1, 2, 3, 4, 5].map((level) => (
-                           <button
-                             key={level}
-                             type="button"
-                             onClick={() => setAiLevel(level)}
-                             className={`py-3 rounded-lg border text-sm font-mono-stats font-bold transition-all active:scale-95 ${
-                               aiLevel === level
-                                 ? 'bg-tertiary text-on-tertiary border-tertiary shadow-md shadow-tertiary/20'
-                                 : 'bg-surface-container text-on-surface-variant border-white/10 hover:bg-surface-variant hover:text-primary'
-                             }`}
-                           >
-                             {level}
-                           </button>
-                         ))}
-                       </div>
-                       <div className="text-center mt-3 text-primary text-sm font-title-md font-bold bg-surface-variant/40 py-2 rounded-lg border border-white/5">{AI_LEVEL_NAMES[aiLevel - 1]}</div>
-                    </div>
-                    <div className="bg-surface-variant/30 border border-white/5 rounded-lg p-4 flex justify-between items-center">
-                      <span className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Win Reward</span>
-                      <span className="text-green-400 font-bold font-mono-stats text-lg">+{aiLevel * 150} XP</span>
-                    </div>
-                  </div>
-
-                  <button onClick={() => setMatchPhase('playing')} className="w-full bg-tertiary hover:bg-yellow-400 text-on-tertiary font-title-md py-3 rounded-lg active:scale-95 transition-all shadow-lg shadow-tertiary/20 shrink-0">
-                    Start Match
-                  </button>
-               </div>
-            </div>
+        <div className="flex gap-4 items-stretch relative w-full max-w-[640px] mx-auto">
+          {matchPhase === 'playing' && (
+            <EvaluationBar evaluation={evaluation} mate={mate} />
           )}
 
-          {isPaused && !isCheckmate && matchPhase === 'playing' && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-lg border border-white/10">
-              <div className="flex flex-col items-center gap-sm">
-                 <Pause className="w-16 h-16 text-tertiary animate-pulse" />
-                 <span className="font-label-caps text-tertiary tracking-widest uppercase">Paused</span>
-                 <p className="font-body-sm text-on-surface-variant mt-2 text-center">Safe to navigate away.<br/>Your progress is saved.</p>
-              </div>
-            </div>
-          )}
-          
-          {isCheckmate && matchPhase === 'playing' && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md rounded-lg border border-tertiary/30 transition-all duration-500 animate-in fade-in zoom-in-95 p-4">
-              <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-[448px] max-h-[90%] overflow-y-auto custom-scrollbar">
-                
-                {turn === 'b' ? (
-                  <>
-                    <Trophy className="w-16 h-16 text-tertiary mb-sm drop-shadow-[0_0_15px_rgba(233,195,73,0.5)] shrink-0" />
-                    <h2 className="font-display-lg text-display-lg text-primary mb-xs">Victory!</h2>
-                    <p className="font-body-lg text-on-surface-variant mb-md">You defeated the {AI_LEVEL_NAMES[aiLevel - 1]} AI.</p>
-                  </>
-                ) : (
-                  <>
-                    <Crown className="w-16 h-16 text-error mb-sm drop-shadow-[0_0_15px_rgba(255,180,171,0.5)] shrink-0" />
-                    <h2 className="font-display-lg text-display-lg text-error mb-xs">Defeat</h2>
-                    <p className="font-body-lg text-on-surface-variant mb-md">The AI proved too strong this time.</p>
-                  </>
-                )}
-                
-                {matchSaved ? (
-                  <div className="w-full bg-surface-container rounded-lg p-md mb-lg border border-white/5 flex flex-col gap-sm shrink-0">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-on-surface-variant">XP Earned</span>
-                      <span className="font-mono-stats text-tertiary">+{xpEarned} XP</span>
-                    </div>
-                    {medalsEarned.map(medal => (
-                      <div key={medal} className="flex justify-between items-center text-sm border-t border-white/5 pt-sm mt-xs">
-                        <span className="text-on-surface-variant flex items-center gap-xs"><Star className="w-4 h-4 text-tertiary" /> Medal Unlocked</span>
-                        <span className="font-title-md text-primary">{medal}</span>
+          <div className="flex-1 relative">
+            <ChessBoard 
+              fen={fen} 
+              onMove={makeMove} 
+              flipped={false} 
+              inCheckSquare={inCheckSquare} 
+              previewMoveSquare={previewMoveSquare}
+              boardTheme={boardTheme}
+              pieceTheme={pieceTheme}
+              lastMove={moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null}
+            />
+
+            {matchPhase === 'setup' && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md rounded-lg p-4 animate-in zoom-in-95 duration-300 overflow-visible">
+                 <div className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl border-t border-white/20 w-[90%] min-w-[320px] max-w-[448px] shrink-0">
+                    <Settings2 className="w-12 h-12 text-tertiary mb-4 shrink-0" />
+                    <h2 className="font-display-lg text-3xl text-primary mb-2 whitespace-nowrap shrink-0">Campaign Setup</h2>
+                    <p className="text-sm text-on-surface-variant mb-6 shrink-0 w-full">Configure your AI opponent and match details.</p>
+                    
+                    <div className="w-full space-y-5 mb-6 text-left shrink-0">
+                      <div>
+                        <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps block mb-2">Match Name (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g., King's Indian Practice"
+                          value={customMatchName}
+                          onChange={(e) => setCustomMatchName(e.target.value)}
+                          className="w-full bg-surface-container text-on-surface font-body-sm border border-white/20 rounded-lg py-3 px-4 focus:outline-none focus:border-tertiary transition-colors"
+                        />
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="w-full py-md mb-lg flex justify-center"><Loader2 className="w-6 h-6 text-tertiary animate-spin" /></div>
-                )}
+                      <div>
+                         <div className="flex justify-between items-center mb-2">
+                           <label className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Difficulty Tier</label>
+                           <span className="text-tertiary font-mono-stats text-sm">Tier {aiLevel}</span>
+                         </div>
+                         <div className="grid grid-cols-5 gap-2 mt-2">
+                           {[1, 2, 3, 4, 5].map((level) => (
+                             <button
+                               key={level}
+                               type="button"
+                               onClick={() => setAiLevel(level)}
+                               className={`py-3 rounded-lg border text-sm font-mono-stats font-bold transition-all active:scale-95 ${
+                                 aiLevel === level
+                                   ? 'bg-tertiary text-on-tertiary border-tertiary shadow-md shadow-tertiary/20'
+                                   : 'bg-surface-container text-on-surface-variant border-white/10 hover:bg-surface-variant hover:text-primary'
+                               }`}
+                             >
+                               {level}
+                             </button>
+                           ))}
+                         </div>
+                         <div className="text-center mt-3 text-primary text-sm font-title-md font-bold bg-surface-variant/40 py-2 rounded-lg border border-white/5">{AI_LEVEL_NAMES[aiLevel - 1]}</div>
+                      </div>
+                      <div className="bg-surface-variant/30 border border-white/5 rounded-lg p-4 flex justify-between items-center">
+                        <span className="text-xs text-on-surface-variant uppercase tracking-widest font-label-caps">Win Reward</span>
+                        <span className="text-green-400 font-bold font-mono-stats text-lg">+{aiLevel * 150} XP</span>
+                      </div>
+                    </div>
 
-                <button onClick={handleResetGame} className="w-full bg-tertiary hover:bg-tertiary-container text-on-tertiary font-title-md text-title-md py-md px-xl rounded-DEFAULT transition-all duration-200 active:scale-95 shadow-[0_0_20px_rgba(233,195,73,0.3)] shrink-0">
-                  Play Again
-                </button>
+                    <button onClick={() => setMatchPhase('playing')} className="w-full bg-tertiary hover:bg-yellow-400 text-on-tertiary font-title-md py-3 rounded-lg active:scale-95 transition-all shadow-lg shadow-tertiary/20 shrink-0">
+                      Start Match
+                    </button>
+                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {isPaused && !isCheckmate && matchPhase === 'playing' && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-lg border border-white/10">
+                <div className="flex flex-col items-center gap-sm">
+                   <Pause className="w-16 h-16 text-tertiary animate-pulse" />
+                   <span className="font-label-caps text-tertiary tracking-widest uppercase">Paused</span>
+                   <p className="font-body-sm text-on-surface-variant mt-2 text-center">Safe to navigate away.<br/>Your progress is saved.</p>
+                </div>
+              </div>
+            )}
+            
+            {isCheckmate && matchPhase === 'playing' && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md rounded-lg border border-tertiary/30 transition-all duration-500 animate-in fade-in zoom-in-95 p-4">
+                <div className="glass-panel p-lg md:p-xl rounded-2xl flex flex-col items-center text-center shadow-[0_0_50px_rgba(233,195,73,0.15)] border-t border-white/20 w-full max-w-[448px] max-h-[90%] overflow-y-auto custom-scrollbar">
+                  
+                  {turn === 'b' ? (
+                    <>
+                      <Trophy className="w-16 h-16 text-tertiary mb-sm drop-shadow-[0_0_15px_rgba(233,195,73,0.5)] shrink-0" />
+                      <h2 className="font-display-lg text-display-lg text-primary mb-xs">Victory!</h2>
+                      <p className="font-body-lg text-on-surface-variant mb-md">You defeated the {AI_LEVEL_NAMES[aiLevel - 1]} AI.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="w-16 h-16 text-error mb-sm drop-shadow-[0_0_15px_rgba(255,180,171,0.5)] shrink-0" />
+                      <h2 className="font-display-lg text-display-lg text-error mb-xs">Defeat</h2>
+                      <p className="font-body-lg text-on-surface-variant mb-md">The AI proved too strong this time.</p>
+                    </>
+                  )}
+                  
+                  {matchSaved ? (
+                    <div className="w-full bg-surface-container rounded-lg p-md mb-lg border border-white/5 flex flex-col gap-sm shrink-0">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-on-surface-variant">XP Earned</span>
+                        <span className="font-mono-stats text-tertiary">+{xpEarned} XP</span>
+                      </div>
+                      {medalsEarned.map(medal => (
+                        <div key={medal} className="flex justify-between items-center text-sm border-t border-white/5 pt-sm mt-xs">
+                          <span className="text-on-surface-variant flex items-center gap-xs"><Star className="w-4 h-4 text-tertiary" /> Medal Unlocked</span>
+                          <span className="font-title-md text-primary">{medal}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="w-full py-md mb-lg flex justify-center"><Loader2 className="w-6 h-6 text-tertiary animate-spin" /></div>
+                  )}
+
+                  <button onClick={handleResetGame} className="w-full bg-tertiary hover:bg-tertiary-container text-on-tertiary font-title-md text-title-md py-md px-xl rounded-DEFAULT transition-all duration-200 active:scale-95 shadow-[0_0_20px_rgba(233,195,73,0.3)] shrink-0">
+                    Play Again
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
+      </div>
 
         <div className="w-full max-w-[600px] flex justify-between items-center mt-md px-sm">
           <div className="flex items-center gap-md">

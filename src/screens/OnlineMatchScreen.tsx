@@ -141,6 +141,7 @@ export const OnlineMatchScreen: React.FC<OnlineMatchScreenProps> = ({
             previewMoveSquare={null} 
             boardTheme={boardTheme}
             pieceTheme={pieceTheme}
+            lastMove={moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null}
           />
 
           {/* Status Overlays */}
